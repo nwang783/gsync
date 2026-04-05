@@ -39,7 +39,7 @@ export default function PlanDetail({ planId, teamId, onClose }) {
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-content" onClick={(e) => e.stopPropagation()}>
           <div className="error-banner" style={{ color: '#fff', background: '#e53e3e', padding: '8px 12px', borderRadius: '4px' }}>{error}</div>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" onClick={onClose}>x</button>
         </div>
       </div>
     );
@@ -65,7 +65,7 @@ export default function PlanDetail({ planId, teamId, onClose }) {
             <StaleBadge updatedAt={plan.updatedAt} />
           </h2>
           <button className="modal-close" onClick={onClose}>
-            ✕
+            x
           </button>
         </div>
 

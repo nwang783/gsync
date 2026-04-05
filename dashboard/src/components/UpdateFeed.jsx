@@ -63,8 +63,8 @@ export default function UpdateFeed({ teamId }) {
   if (loading) {
     return (
       <div className="update-feed">
-        <h2>Activity Feed</h2>
-        <div className="empty-state">Loading activity...</div>
+        <h2>## activity</h2>
+        <div className="empty-state">loading...</div>
       </div>
     );
   }
@@ -72,8 +72,8 @@ export default function UpdateFeed({ teamId }) {
   if (error) {
     return (
       <div className="update-feed">
-        <h2>Activity Feed</h2>
-        <div className="error-banner" style={{ color: '#fff', background: '#e53e3e', padding: '8px 12px', borderRadius: '4px' }}>{error}</div>
+        <h2>## activity</h2>
+        <div className="error-banner" style={{ color: '#fff', background: '#e53e3e', padding: '8px 12px', borderRadius: '8px' }}>{error}</div>
       </div>
     );
   }
@@ -81,15 +81,15 @@ export default function UpdateFeed({ teamId }) {
   if (display.length === 0) {
     return (
       <div className="update-feed">
-        <h2>Activity Feed</h2>
-        <div className="empty-state">No activity yet</div>
+        <h2>## activity</h2>
+        <div className="empty-state">no activity yet</div>
       </div>
     );
   }
 
   return (
     <div className="update-feed">
-      <h2>Activity Feed</h2>
+      <h2>## activity</h2>
       <div className="feed-list">
         {display.map((ev, i) => (
           <div key={i} className="feed-item">
@@ -98,7 +98,7 @@ export default function UpdateFeed({ teamId }) {
               <span className="feed-author">{ev.author}</span>{' '}
               <span className="feed-action">{ev.action}</span>{' '}
               <span className="feed-slug">{ev.slug}</span>
-              {ev.note && <span className="feed-note"> — {ev.note}</span>}
+              {ev.note && <span className="feed-note"> -- {ev.note}</span>}
             </span>
           </div>
         ))}

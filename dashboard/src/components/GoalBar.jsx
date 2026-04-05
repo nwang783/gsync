@@ -33,16 +33,16 @@ export default function GoalBar({ teamId }) {
 
   return (
     <div className="goal-bar">
-      {error && <div className="error-banner" style={{ color: '#fff', background: '#e53e3e', padding: '8px 12px', borderRadius: '4px', marginBottom: '8px' }}>{error}</div>}
-      <GoalCard label="2-Week Goal" data={twoWeek} />
-      <GoalCard label="3-Day Target" data={threeDay} />
+      {error && <div className="error-banner" style={{ color: '#fff', background: '#e53e3e', padding: '8px 12px', borderRadius: '8px', marginBottom: '8px' }}>{error}</div>}
+      <GoalCard label="## 2-week goal" variant="primary" data={twoWeek} />
+      <GoalCard label="## 3-day target" variant="secondary" data={threeDay} />
     </div>
   );
 }
 
-function GoalCard({ label, data }) {
+function GoalCard({ label, variant, data }) {
   return (
-    <div className="goal-card">
+    <div className={`goal-card goal-card--${variant}`}>
       <div className="goal-label">{label}</div>
       {data ? (
         <>
