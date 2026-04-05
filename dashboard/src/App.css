@@ -239,6 +239,7 @@ body::before {
 
 .goal-card:hover {
   border-color: var(--text-muted);
+  cursor: pointer;
 }
 
 /* primary: 2-week goal — left accent border */
@@ -576,6 +577,14 @@ body::before {
   color: var(--text-muted);
   max-width: 340px;
   line-height: 1.6;
+  letter-spacing: 0.3px;
+}
+
+.goal-detail-label {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
   letter-spacing: 0.3px;
 }
 

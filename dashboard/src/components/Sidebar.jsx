@@ -29,7 +29,6 @@ export default function Sidebar({ active, onNavigate }) {
         </div>
 
         <nav className="sidebar-nav">
-          <div className="sidebar-section-label">// nav</div>
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}

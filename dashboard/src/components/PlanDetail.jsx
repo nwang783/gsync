@@ -59,11 +59,10 @@ export default function PlanDetail({ planId, teamId, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>
-            {plan.slug || plan.id}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className={`status-badge ${statusClass}`}>{plan.status}</span>
             <StaleBadge updatedAt={plan.updatedAt} />
-          </h2>
+          </div>
           <button className="modal-close" onClick={onClose}>
             x
           </button>
