@@ -1,0 +1,108 @@
+import { useState, useEffect } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase.js';
+import { relativeTime, toDate } from '../utils.js';
+
+export default function UpdateFeed({ teamId }) {
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const q = collection(db, 'teams', teamId, 'plans');
+    const unsub = onSnapshot(q, (snap) => {
+      setPlans(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, (err) => {
+      setError(err.message);
+      setLoading(false);
+    });
+    return unsub;
+  }, [teamId]);
+
+  const events = [];
+
+  for (const plan of plans) {
+    if (plan.createdAt) {
+      events.push({
+        time: toDate(plan.createdAt),
+        author: plan.author,
+        slug: plan.slug || plan.id,
+        action: 'created',
+        note: plan.summary || '',
+      });
+    }
+
+    if (Array.isArray(plan.updates)) {
+      for (const u of plan.updates) {
+        events.push({
+          time: toDate(u.timestamp),
+          author: u.author || plan.author,
+          slug: plan.slug || plan.id,
+          action: 'updated',
+          note: u.note || '',
+        });
+      }
+    }
+  }
+
+  events.sort((a, b) => {
+    const ta = a.time?.getTime() ?? 0;
+    const tb = b.time?.getTime() ?? 0;
+    return tb - ta;
+  });
+
+  const display = events.slice(0, 50);
+
+  if (loading) {
+    return (
+      <div className="update-feed">
+        <h2>Activity Feed</h2>
+        <div className="empty-state">Loading activity...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="update-feed">
+        <h2>Activity Feed</h2>
+        <div className="error-banner" style={{ color: '#fff', background: '#e53e3e', padding: '8px 12px', borderRadius: '4px' }}>{error}</div>
+      </div>
+    );
+  }
+
+  if (display.length === 0) {
+    return (
+      <div className="update-feed">
+        <h2>Activity Feed</h2>
+        <div className="empty-state">No activity yet</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="update-feed">
+      <h2>Activity Feed</h2>
+      <div className="feed-list">
+        {display.map((ev, i) => (
+          <div key={i} className="feed-item">
+            <span className="feed-time">{relativeTime(ev.time)}</span>
+            <span>
+              <span className="feed-author">{ev.author}</span>{' '}
+              <span className="feed-action">{ev.action}</span>{' '}
+              <span className="feed-slug">{ev.slug}</span>
+              {ev.note && <span className="feed-note"> — {ev.note}</span>}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
