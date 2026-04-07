@@ -1,6 +1,6 @@
 import { formatRelativeTime } from './format.js';
 
-export function generateContext(twoWeek, threeDay, activePlans, allPlans) {
+export function generateContext(twoWeek, threeDay, activePlans, recentPlans) {
   const now = new Date().toISOString();
   const lines = [];
 
@@ -32,30 +32,37 @@ export function generateContext(twoWeek, threeDay, activePlans, allPlans) {
       lines.push(`Touches: ${Array.isArray(plan.touches) ? plan.touches.join(', ') : plan.touches}`);
       lines.push(`Out of scope: ${plan.outOfScope}`);
       lines.push(`PR: ${plan.prUrl || '—'}`);
+      lines.push(`Revision: ${plan.revision || 0}`);
     }
   }
   lines.push('');
 
-  // Recent Activity (last 24h)
-  lines.push('## Recent Activity (last 24h)');
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  lines.push('## Recent Plans');
+  if (recentPlans.length === 0) {
+    lines.push('(no recent plans)');
+  } else {
+    for (const plan of recentPlans) {
+      lines.push(`- ${plan.author} — ${plan.slug} (${plan.status}, updated ${formatRelativeTime(plan.updatedAt)}): ${plan.summary}`);
+    }
+  }
+  lines.push('');
+
+  lines.push('## Recent Activity');
   const activities = [];
 
-  for (const plan of allPlans) {
-    // Plan creation
+  for (const plan of recentPlans) {
     const createdMs = toMillis(plan.createdAt);
-    if (createdMs && createdMs > cutoff) {
+    if (createdMs) {
       activities.push({
         time: createdMs,
         text: `${plan.author} created ${plan.slug}`,
       });
     }
 
-    // Updates
     if (plan.updates) {
       for (const u of plan.updates) {
         const uMs = toMillis(u.timestamp);
-        if (uMs && uMs > cutoff) {
+        if (uMs) {
           activities.push({
             time: uMs,
             text: `${u.author} updated ${plan.slug}: "${u.note}"`,

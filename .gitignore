@@ -3,3 +3,5 @@ dashboard/node_modules/
 dashboard/dist/
 .env
 dashboard/.env
+.agents
+.DS_Store

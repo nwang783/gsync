@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { relativeTime, toDate } from '../utils.js';
 import StaleBadge from './StaleBadge.jsx';
 
 export default function PlanDetail({ planId, teamId, onClose }) {
   const [plan, setPlan] = useState(null);
+  const [content, setContent] = useState(null);
+  const [contentError, setContentError] = useState(null);
+  const [contentLoading, setContentLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -24,6 +27,32 @@ export default function PlanDetail({ planId, teamId, onClose }) {
     return unsub;
   }, [teamId, planId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadContent() {
+      setContentLoading(true);
+      setContentError(null);
+      try {
+        const snap = await getDoc(doc(db, 'teams', teamId, 'plans', planId, 'content', 'current'));
+        if (!cancelled) {
+          setContent(snap.exists() ? snap.data() : null);
+          setContentLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setContentError(err.message);
+          setContentLoading(false);
+        }
+      }
+    }
+
+    loadContent();
+    return () => {
+      cancelled = true;
+    };
+  }, [teamId, planId]);
+
   if (loading) {
     return (
       <div className="modal-overlay" onClick={onClose}>
@@ -39,7 +68,7 @@ export default function PlanDetail({ planId, teamId, onClose }) {
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-content" onClick={(e) => e.stopPropagation()}>
           <div className="error-banner" style={{ color: '#fff', background: '#e53e3e', padding: '8px 12px', borderRadius: '4px' }}>{error}</div>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" onClick={onClose}>x</button>
         </div>
       </div>
     );
@@ -59,13 +88,12 @@ export default function PlanDetail({ planId, teamId, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>
-            {plan.slug || plan.id}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className={`status-badge ${statusClass}`}>{plan.status}</span>
             <StaleBadge updatedAt={plan.updatedAt} />
-          </h2>
+          </div>
           <button className="modal-close" onClick={onClose}>
-            ✕
+            x
           </button>
         </div>
 
@@ -143,6 +171,18 @@ export default function PlanDetail({ planId, teamId, onClose }) {
             ))}
           </div>
         )}
+
+        <div className="modal-section">
+          <div className="section-label">Canonical Plan</div>
+          {contentLoading && <div className="section-value">Loading markdown…</div>}
+          {contentError && <div className="section-value">{contentError}</div>}
+          {!contentLoading && !contentError && !content?.markdown && (
+            <div className="section-value">No canonical markdown body yet.</div>
+          )}
+          {!contentLoading && !contentError && content?.markdown && (
+            <pre className="section-value" style={{ whiteSpace: 'pre-wrap' }}>{content.markdown}</pre>
+          )}
+        </div>
       </div>
     </div>
   );

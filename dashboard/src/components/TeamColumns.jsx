@@ -41,7 +41,7 @@ export default function TeamColumns({ teamId, onSelectPlan }) {
   const authors = Object.keys(byAuthor).sort();
 
   if (loading) {
-    return <div className="empty-state">Loading plans...</div>;
+    return <div className="empty-state">loading...</div>;
   }
 
   if (error) {
@@ -49,7 +49,7 @@ export default function TeamColumns({ teamId, onSelectPlan }) {
   }
 
   if (authors.length === 0) {
-    return <div className="empty-state">No active plans</div>;
+    return <div className="empty-state">no active plans</div>;
   }
 
   return (
@@ -84,7 +84,7 @@ function PlanCard({ plan, onClick }) {
         <StaleBadge updatedAt={plan.updatedAt} />
       </div>
       {plan.summary && <div className="summary">{plan.summary}</div>}
-      {plan.alignment && <div className="alignment">🎯 {plan.alignment}</div>}
+      {plan.alignment && <div className="alignment">&gt; {plan.alignment}</div>}
       {touches.length > 0 && (
         <div className="touches">
           {touches.map((t, i) => (

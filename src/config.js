@@ -5,7 +5,9 @@ import os from 'os';
 export const CONFIG_DIR = path.join(os.homedir(), '.gsync');
 export const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 export const CONTEXT_FILE = path.join(CONFIG_DIR, 'CONTEXT.md');
+export const INDEX_FILE = path.join(CONFIG_DIR, 'index.json');
 export const PLANS_DIR = path.join(CONFIG_DIR, 'plans');
+export const SKILL_FILE = path.join(CONFIG_DIR, 'SKILL.md');
 
 export function loadConfig() {
   if (!fs.existsSync(CONFIG_FILE)) {
