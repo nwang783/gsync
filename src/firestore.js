@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { initializeApp, deleteApp } from 'firebase/app';
 import {
   getFirestore,
@@ -6,10 +7,11 @@ import {
   collection,
   getDoc,
   setDoc,
-  addDoc,
   updateDoc,
   query,
   where,
+  orderBy,
+  limit as limitDocs,
   getDocs,
   arrayUnion,
   serverTimestamp,
@@ -63,23 +65,97 @@ export async function setTeamMeta(teamId, type, content, userName) {
 
 // --- Plans ---
 
-export async function createPlan(teamId, planData) {
-  const col = collection(getDb(), 'teams', teamId, 'plans');
-  const docRef = await addDoc(col, {
-    ...planData,
-    status: 'in-progress',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    updates: [],
-  });
-  return docRef.id;
-}
-
-export async function getPlan(teamId, planId) {
+export async function getPlanSummary(teamId, planId) {
   const ref = doc(getDb(), 'teams', teamId, 'plans', planId);
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() };
+}
+
+export async function getPlanContent(teamId, planId) {
+  const ref = doc(getDb(), 'teams', teamId, 'plans', planId, 'content', 'current');
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  return snap.data();
+}
+
+export async function upsertPlanContent(teamId, planId, summaryData, markdown, userName, expectedRevision = null) {
+  const plansCol = collection(getDb(), 'teams', teamId, 'plans');
+  const summaryRef = planId ? doc(getDb(), 'teams', teamId, 'plans', planId) : doc(plansCol);
+  const contentRef = doc(summaryRef, 'content', 'current');
+  const hash = crypto.createHash('sha256').update(markdown).digest('hex').slice(0, 16);
+
+  await runTransaction(getDb(), async (transaction) => {
+    const summarySnap = await transaction.get(summaryRef);
+    const contentSnap = await transaction.get(contentRef);
+
+    if (!summarySnap.exists()) {
+      if (planId) {
+        throw new Error(`Plan ${planId} not found.`);
+      }
+
+      transaction.set(summaryRef, {
+        slug: summaryData.slug,
+        summary: summaryData.summary,
+        alignment: summaryData.alignment || '',
+        outOfScope: summaryData.outOfScope || '',
+        touches: summaryData.touches || [],
+        author: summaryData.author,
+        status: summaryData.status || 'in-progress',
+        prUrl: summaryData.prUrl || null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        revision: 1,
+        latestBodyUpdatedAt: serverTimestamp(),
+        latestBodyUpdatedBy: userName,
+        updates: [],
+      });
+      transaction.set(contentRef, {
+        markdown,
+        revision: 1,
+        hash,
+        updatedAt: serverTimestamp(),
+        updatedBy: userName,
+      });
+      return;
+    }
+
+    const currentRevision = contentSnap.exists()
+      ? contentSnap.data().revision || 0
+      : summarySnap.data().revision || 0;
+
+    if (expectedRevision == null) {
+      throw new Error('Updating an existing plan requires a revision. Pull the plan first or pass a file with frontmatter revision.');
+    }
+    if (expectedRevision !== currentRevision) {
+      throw new Error(`Revision conflict: expected ${expectedRevision}, current is ${currentRevision}. Pull the latest plan and retry.`);
+    }
+
+    const existing = summarySnap.data();
+    const nextRevision = currentRevision + 1;
+    transaction.update(summaryRef, {
+      slug: summaryData.slug || existing.slug,
+      summary: summaryData.summary || existing.summary,
+      alignment: summaryData.alignment ?? existing.alignment ?? '',
+      outOfScope: summaryData.outOfScope ?? existing.outOfScope ?? '',
+      touches: summaryData.touches ?? existing.touches ?? [],
+      status: summaryData.status || existing.status || 'in-progress',
+      prUrl: summaryData.prUrl ?? existing.prUrl ?? null,
+      updatedAt: serverTimestamp(),
+      revision: nextRevision,
+      latestBodyUpdatedAt: serverTimestamp(),
+      latestBodyUpdatedBy: userName,
+    });
+    transaction.set(contentRef, {
+      markdown,
+      revision: nextRevision,
+      hash,
+      updatedAt: serverTimestamp(),
+      updatedBy: userName,
+    });
+  });
+
+  return summaryRef.id;
 }
 
 export async function updatePlanNote(teamId, planId, note, userName) {
@@ -120,13 +196,24 @@ export async function updatePlanStatus(teamId, planId, status, extraFields = {})
 
 export async function getActivePlans(teamId) {
   const col = collection(getDb(), 'teams', teamId, 'plans');
-  const q = query(col, where('status', 'in', ['draft', 'in-progress', 'review']));
+  const q = query(col, where('status', 'in', ['in-progress', 'review']));
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
+}
+
+export async function getRecentPlans(teamId, count = 20) {
+  const col = collection(getDb(), 'teams', teamId, 'plans');
+  const q = query(col, orderBy('updatedAt', 'desc'), limitDocs(count));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-export async function getAllPlans(teamId) {
-  const col = collection(getDb(), 'teams', teamId, 'plans');
-  const snap = await getDocs(col);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+function toMillis(timestamp) {
+  if (!timestamp) return 0;
+  if (timestamp.toMillis) return timestamp.toMillis();
+  if (timestamp.seconds) return timestamp.seconds * 1000;
+  if (timestamp instanceof Date) return timestamp.getTime();
+  return new Date(timestamp).getTime();
 }

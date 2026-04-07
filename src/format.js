@@ -40,6 +40,7 @@ export function formatPlanDetail(plan) {
   lines.push(`Touches: ${Array.isArray(plan.touches) ? plan.touches.join(', ') : plan.touches}`);
   lines.push(`Out of scope: ${plan.outOfScope}`);
   lines.push(`PR: ${plan.prUrl || '—'}`);
+  lines.push(`Revision: ${plan.revision || 0}`);
   lines.push(`Created: ${formatRelativeTime(plan.createdAt)}`);
   lines.push(`Updated: ${formatRelativeTime(plan.updatedAt)}`);
 
@@ -53,6 +54,22 @@ export function formatPlanDetail(plan) {
   }
 
   return lines.join('\n');
+}
+
+export function formatPlanSummaryDetail(plan) {
+  return [
+    `Plan: ${plan.slug} [${plan.id}]`,
+    `Author: ${plan.author || '—'}`,
+    `Status: ${plan.status || '—'}`,
+    `Summary: ${plan.summary || '—'}`,
+    `Alignment: ${plan.alignment || '—'}`,
+    `Touches: ${Array.isArray(plan.touches) ? plan.touches.join(', ') : '—'}`,
+    `Out of scope: ${plan.outOfScope || '—'}`,
+    `PR: ${plan.prUrl || '—'}`,
+    `Revision: ${plan.revision || 0}`,
+    `Created: ${formatRelativeTime(plan.createdAt)}`,
+    `Updated: ${formatRelativeTime(plan.updatedAt)}`,
+  ].join('\n');
 }
 
 export function parseDuration(str) {

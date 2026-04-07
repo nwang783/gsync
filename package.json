@@ -5,6 +5,9 @@
   "bin": {
     "gsync": "./bin/gsync.js"
   },
+  "scripts": {
+    "test": "node --test"
+  },
   "dependencies": {
     "firebase": "^11.0.0",
     "commander": "^12.0.0",

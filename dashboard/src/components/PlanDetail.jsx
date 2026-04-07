@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { relativeTime, toDate } from '../utils.js';
 import StaleBadge from './StaleBadge.jsx';
 
 export default function PlanDetail({ planId, teamId, onClose }) {
   const [plan, setPlan] = useState(null);
+  const [content, setContent] = useState(null);
+  const [contentError, setContentError] = useState(null);
+  const [contentLoading, setContentLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -22,6 +25,32 @@ export default function PlanDetail({ planId, teamId, onClose }) {
       },
     );
     return unsub;
+  }, [teamId, planId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadContent() {
+      setContentLoading(true);
+      setContentError(null);
+      try {
+        const snap = await getDoc(doc(db, 'teams', teamId, 'plans', planId, 'content', 'current'));
+        if (!cancelled) {
+          setContent(snap.exists() ? snap.data() : null);
+          setContentLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setContentError(err.message);
+          setContentLoading(false);
+        }
+      }
+    }
+
+    loadContent();
+    return () => {
+      cancelled = true;
+    };
   }, [teamId, planId]);
 
   if (loading) {
@@ -142,6 +171,18 @@ export default function PlanDetail({ planId, teamId, onClose }) {
             ))}
           </div>
         )}
+
+        <div className="modal-section">
+          <div className="section-label">Canonical Plan</div>
+          {contentLoading && <div className="section-value">Loading markdown…</div>}
+          {contentError && <div className="section-value">{contentError}</div>}
+          {!contentLoading && !contentError && !content?.markdown && (
+            <div className="section-value">No canonical markdown body yet.</div>
+          )}
+          {!contentLoading && !contentError && content?.markdown && (
+            <pre className="section-value" style={{ whiteSpace: 'pre-wrap' }}>{content.markdown}</pre>
+          )}
+        </div>
       </div>
     </div>
   );

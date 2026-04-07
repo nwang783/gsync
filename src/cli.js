@@ -3,10 +3,12 @@ import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
 
-import { loadConfig, saveConfig, ensureDirs, PLANS_DIR, CONFIG_FILE, CONTEXT_FILE } from './config.js';
-import { initFirebase, cleanup, getTeamMeta, setTeamMeta, createPlan, getPlan, updatePlanNote, updatePlanStatus, getActivePlans, getAllPlans } from './firestore.js';
+import { fileURLToPath } from 'url';
+import { loadConfig, saveConfig, ensureDirs, PLANS_DIR, CONFIG_FILE, CONTEXT_FILE, INDEX_FILE, SKILL_FILE } from './config.js';
+import { initFirebase, cleanup, getTeamMeta, setTeamMeta, getPlanContent, getPlanSummary, getRecentPlans, updatePlanNote, updatePlanStatus, getActivePlans, upsertPlanContent } from './firestore.js';
 import { generateContext } from './context.js';
-import { formatPlanSummary, formatPlanDetail, formatRelativeTime, parseDuration } from './format.js';
+import { formatPlanSummary, formatPlanSummaryDetail, formatRelativeTime, parseDuration } from './format.js';
+import { buildPulledPlanFile, normalizeTouches, parsePlanFile } from './plan-file.js';
 
 const program = new Command();
 
@@ -54,6 +56,19 @@ function sanitizeFilename(str) {
   return str.replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'plan';
 }
 
+function writeLocalPlanFile(summary, content) {
+  ensureDirs();
+  const filename = `${sanitizeFilename(summary.slug || 'plan')}--${summary.id}.md`;
+  const filePath = path.join(PLANS_DIR, filename);
+  fs.writeFileSync(filePath, buildPulledPlanFile(summary, content), 'utf-8');
+  return filePath;
+}
+
+function loadIndex() {
+  if (!fs.existsSync(INDEX_FILE)) return null;
+  return JSON.parse(fs.readFileSync(INDEX_FILE, 'utf-8'));
+}
+
 // --- gsync init ---
 program
   .command('init')
@@ -95,10 +110,18 @@ program
         console.log(chalk.yellow(`  Proceeding — this may be a new/empty project.`));
       }
 
+      // Copy SKILL.md for agent integration
+      const skillSrc = path.join(path.dirname(fileURLToPath(import.meta.url)), '../SKILL.md');
+      if (fs.existsSync(skillSrc)) {
+        fs.copyFileSync(skillSrc, SKILL_FILE);
+      }
+
       console.log(chalk.green('✓ gsync initialized!'));
       console.log(chalk.cyan(`  Config saved to ~/.gsync/config.json`));
       console.log(chalk.cyan(`  Plans directory: ~/.gsync/plans/`));
-      console.log(chalk.yellow(`  Note: Copy your SKILL.md to ~/.gsync/SKILL.md for agent integration.`));
+      if (fs.existsSync(SKILL_FILE)) {
+        console.log(chalk.cyan(`  SKILL.md installed at ~/.gsync/SKILL.md`));
+      }
     } catch (err) {
       console.error(chalk.red(`Init failed: ${friendlyError(err)}`));
       process.exit(1);
@@ -109,48 +132,33 @@ program
 program
   .command('sync')
   .description('Sync plans and generate CONTEXT.md')
-  .action(async () => {
+  .option('--last <count>', 'number of recent plans to include', '20')
+  .action(async (opts) => {
     try {
       const config = requireConfig();
       ensureDirs();
+      const recentCount = Number.parseInt(opts.last ?? '20', 10);
 
       verbose('Fetching data from Firestore...');
-      const [twoWeek, threeDay, activePlans, allPlans] = await Promise.all([
+      const [twoWeek, threeDay, activePlans, recentPlans] = await Promise.all([
         getTeamMeta(config.teamId, '2week'),
         getTeamMeta(config.teamId, '3day'),
         getActivePlans(config.teamId),
-        getAllPlans(config.teamId),
+        getRecentPlans(config.teamId, Number.isNaN(recentCount) ? 20 : recentCount),
       ]);
 
-      // Build plan cache files in memory
-      const planFiles = activePlans.map((plan) => {
-        const filename = `${sanitizeFilename(plan.slug || 'plan')}--${plan.id}.md`;
-        const content = formatPlanDetail(plan);
-        return { filename, content };
-      });
-
-      // Build CONTEXT.md in memory
-      const contextContent = generateContext(twoWeek, threeDay, activePlans, allPlans);
-
-      // All data ready — now write to disk atomically
-      const newFilenames = new Set(planFiles.map((f) => f.filename));
-      const existing = fs.readdirSync(PLANS_DIR).filter((f) => f.endsWith('.md'));
-
-      // Write new/updated files
-      for (const { filename, content } of planFiles) {
-        fs.writeFileSync(path.join(PLANS_DIR, filename), content, 'utf-8');
-        verbose(`Wrote ${filename}`);
-      }
-
-      // Remove old files not in new set
-      for (const f of existing) {
-        if (!newFilenames.has(f)) {
-          fs.unlinkSync(path.join(PLANS_DIR, f));
-          verbose(`Removed stale ${f}`);
-        }
-      }
-
+      const contextContent = generateContext(twoWeek, threeDay, activePlans, recentPlans);
       fs.writeFileSync(CONTEXT_FILE, contextContent, 'utf-8');
+      fs.writeFileSync(
+        INDEX_FILE,
+        JSON.stringify({
+          syncedAt: new Date().toISOString(),
+          teamId: config.teamId,
+          activePlans,
+          recentPlans,
+        }, null, 2) + '\n',
+        'utf-8',
+      );
 
       console.log(chalk.green(`✓ Synced ${activePlans.length} active plan(s)`));
       console.log(chalk.cyan(`  CONTEXT.md updated at ~/.gsync/CONTEXT.md`));
@@ -168,40 +176,6 @@ program
 const planCmd = program
   .command('plan')
   .description('Manage plans');
-
-// gsync plan create
-planCmd
-  .command('create')
-  .description('Create a new plan')
-  .requiredOption('--summary <text>', 'plan summary')
-  .requiredOption('--alignment <text>', 'alignment with current goals')
-  .requiredOption('--out-of-scope <text>', 'what is out of scope')
-  .requiredOption('--touches <paths>', 'comma-separated list of files/dirs touched')
-  .action(async (opts) => {
-    try {
-      const config = requireConfig();
-      const slug = slugify(opts.summary);
-      const touches = opts.touches.split(',').map((t) => t.trim());
-
-      verbose('Creating plan:', slug);
-      const planData = {
-        slug,
-        summary: opts.summary,
-        alignment: opts.alignment,
-        outOfScope: opts.outOfScope,
-        touches,
-        author: config.userName,
-      };
-
-      const id = await createPlan(config.teamId, planData);
-      console.log(chalk.green(`✓ Plan created: ${slug}`));
-      console.log(chalk.cyan(`  ID: ${id}`));
-    } catch (err) {
-      console.error(chalk.red(`Plan create failed: ${friendlyError(err)}`));
-      if (program.opts().verbose) console.error(err);
-      process.exit(1);
-    }
-  });
 
 // gsync plan update <id>
 planCmd
@@ -221,7 +195,64 @@ planCmd
     }
   });
 
-// gsync plan review <id>
+planCmd
+  .command('push <file>')
+  .description('Create or update a canonical markdown plan')
+  .option('--id <id>', 'existing plan ID')
+  .option('--summary <text>', 'plan summary override')
+  .option('--alignment <text>', 'alignment override')
+  .option('--out-of-scope <text>', 'out of scope override')
+  .option('--touches <paths>', 'comma-separated touched paths override')
+  .option('--status <status>', 'status override')
+  .action(async (file, opts) => {
+    try {
+      const config = requireConfig();
+      const raw = fs.readFileSync(path.resolve(file), 'utf-8');
+      const parsed = parsePlanFile(raw);
+      const summary = opts.summary || parsed.metadata.summary;
+      if (!summary) {
+        throw new Error('Plan summary is required. Add `summary:` to frontmatter or pass `--summary`.');
+      }
+
+      const planId = opts.id || parsed.metadata.id || null;
+      const touches = normalizeTouches(opts.touches || parsed.metadata.touches || '');
+      const revision = parsed.metadata.revision == null ? null : Number.parseInt(String(parsed.metadata.revision), 10);
+      const slug = sanitizeFilename(parsed.metadata.slug || slugify(summary));
+      const summaryData = {
+        slug,
+        summary,
+        alignment: opts.alignment ?? parsed.metadata.alignment ?? '',
+        outOfScope: opts.outOfScope ?? parsed.metadata.outOfScope ?? '',
+        touches,
+        author: parsed.metadata.author || config.userName,
+        status: opts.status || parsed.metadata.status || 'in-progress',
+        prUrl: parsed.metadata.prUrl || null,
+      };
+
+      const id = await upsertPlanContent(
+        config.teamId,
+        planId,
+        summaryData,
+        parsed.markdown,
+        config.userName,
+        Number.isNaN(revision) ? null : revision,
+      );
+
+      const savedSummary = await getPlanSummary(config.teamId, id);
+      const savedContent = await getPlanContent(config.teamId, id);
+      const localPath = writeLocalPlanFile(savedSummary, savedContent);
+
+      console.log(chalk.green(`✓ Plan pushed: ${savedSummary.slug}`));
+      console.log(chalk.cyan(`  ID: ${id}`));
+      console.log(chalk.cyan(`  Revision: ${savedContent?.revision || savedSummary.revision || 0}`));
+      console.log(chalk.cyan(`  Cached at: ${localPath}`));
+    } catch (err) {
+      console.error(chalk.red(`Plan push failed: ${friendlyError(err)}`));
+      if (program.opts().verbose) console.error(err);
+      process.exit(1);
+    }
+  });
+
 planCmd
   .command('review <id>')
   .description('Move plan to review status')
@@ -266,20 +297,41 @@ planCmd
 
 // gsync plan get <id>
 planCmd
-  .command('get <id>')
-  .description('Get full plan details')
-  .action(async (id) => {
+  .command('pull <id>')
+  .description('Fetch a plan')
+  .option('--metadata-only', 'print summary metadata without pulling the body')
+  .option('--stdout', 'print the full canonical markdown body instead of writing a file')
+  .action(async (id, opts) => {
     try {
       const config = requireConfig();
-      verbose('Fetching plan:', id);
-      const plan = await getPlan(config.teamId, id);
-      if (!plan) {
-        console.error(chalk.red(`Plan ${id} not found.`));
-        process.exit(1);
+      const summary = await getPlanSummary(config.teamId, id);
+      if (!summary) {
+        throw new Error(`Plan ${id} not found.`);
       }
-      console.log(formatPlanDetail(plan));
+
+      if (opts.metadataOnly) {
+        console.log(formatPlanSummaryDetail(summary));
+        return;
+      }
+
+      const content = await getPlanContent(config.teamId, id);
+      if (!content) {
+        throw new Error(`Plan ${id} has no canonical markdown body yet.`);
+      }
+
+      if (opts.stdout) {
+        console.log(formatPlanSummaryDetail(summary));
+        console.log('');
+        console.log(content.markdown);
+        return;
+      }
+
+      const localPath = writeLocalPlanFile(summary, content);
+      console.log(chalk.green(`✓ Plan pulled: ${summary.slug}`));
+      console.log(chalk.cyan(`  Cached at: ${localPath}`));
+      console.log(chalk.cyan(`  Revision: ${content.revision || summary.revision || 0}`));
     } catch (err) {
-      console.error(chalk.red(`Plan get failed: ${friendlyError(err)}`));
+      console.error(chalk.red(`Plan pull failed: ${friendlyError(err)}`));
       if (program.opts().verbose) console.error(err);
       process.exit(1);
     }
@@ -330,23 +382,14 @@ program
   .description('Show status of all active plans from local cache')
   .action(() => {
     try {
-      ensureDirs();
-      const files = fs.readdirSync(PLANS_DIR).filter((f) => f.endsWith('.md'));
-      if (files.length === 0) {
+      const index = loadIndex();
+      if (!index || !Array.isArray(index.activePlans) || index.activePlans.length === 0) {
         console.log(chalk.yellow('No cached plans. Run `gsync sync` first.'));
         return;
       }
-      console.log(chalk.cyan(`Active plans (${files.length}):`));
-      for (const f of files) {
-        const content = fs.readFileSync(path.join(PLANS_DIR, f), 'utf-8');
-        const statusMatch = content.match(/^Status:\s*(.+)$/m);
-        const authorMatch = content.match(/^Author:\s*(.+)$/m);
-        const summaryMatch = content.match(/^Summary:\s*(.+)$/m);
-        const name = f.replace('.md', '').replace(/--[a-zA-Z0-9]+$/, '');
-        const status = statusMatch ? statusMatch[1] : 'unknown';
-        const author = authorMatch ? authorMatch[1] : 'unknown';
-        const summary = summaryMatch ? summaryMatch[1] : '';
-        console.log(`  ${chalk.white(author)} — ${chalk.cyan(name)} (${status}): ${summary}`);
+      console.log(chalk.cyan(`Active plans (${index.activePlans.length}):`));
+      for (const plan of index.activePlans) {
+        console.log(`  ${chalk.white(plan.author || 'unknown')} — ${chalk.cyan(plan.slug || plan.id)} (${plan.status || 'unknown'}): ${plan.summary || ''}`);
       }
     } catch (err) {
       console.error(chalk.red(`Status failed: ${friendlyError(err)}`));
@@ -366,7 +409,7 @@ program
       const cutoff = Date.now() - durationMs;
 
       verbose(`Fetching all plans, cutoff: ${new Date(cutoff).toISOString()}`);
-      const plans = await getAllPlans(config.teamId);
+      const plans = await getRecentPlans(config.teamId, 50);
 
       const events = [];
 
