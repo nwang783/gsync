@@ -11,7 +11,7 @@ export const PLANS_DIR = path.join(CONFIG_DIR, 'plans');
 export const SKILL_FILE = path.join(CONFIG_DIR, 'SKILL.md');
 
 const DEFAULT_FIREBASE_PROJECT_ID = process.env.GSYNC_FIREBASE_PROJECT_ID || 'nomergeconflicts';
-const DEFAULT_FIREBASE_API_KEY = process.env.GSYNC_FIREBASE_API_KEY || 'demo-api-key';
+const DEFAULT_FIREBASE_API_KEY = process.env.GSYNC_FIREBASE_API_KEY || 'AIzaSyD3FJkbzXQiDZCDoDauqPUW07lszVpCVpU';
 const DEFAULT_API_BASE_URL = (
   process.env.GSYNC_API_BASE_URL || `https://${DEFAULT_FIREBASE_PROJECT_ID}.web.app/api`
 ).replace(/\/+$/, '');

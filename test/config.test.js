@@ -19,7 +19,7 @@ test('loadConfig falls back to hosted defaults when no config file exists', () =
   const config = configModule.loadConfig();
   assert.equal(config.apiBaseUrl, 'https://nomergeconflicts.web.app/api');
   assert.equal(config.firebaseProjectId, 'nomergeconflicts');
-  assert.equal(config.firebaseApiKey, 'demo-api-key');
+  assert.equal(config.firebaseApiKey, 'AIzaSyD3FJkbzXQiDZCDoDauqPUW07lszVpCVpU');
   assert.equal(config.useEmulators, false);
 });
 
