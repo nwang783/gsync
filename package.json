@@ -10,6 +10,8 @@
     "test:dashboard": "npm --prefix dashboard test",
     "build:dashboard": "npm --prefix dashboard run build",
     "dev:dashboard": "npm --prefix dashboard run dev",
+    "deploy:hosting": "npm run build:dashboard && firebase deploy --only hosting",
+    "deploy:firebase": "npm run build:dashboard && firebase deploy",
     "emulators": "firebase emulators:start --only auth,firestore,functions,hosting"
   },
   "dependencies": {

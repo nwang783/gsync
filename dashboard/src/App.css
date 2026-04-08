@@ -751,13 +751,14 @@ body::before {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   HOMEPAGE — The Living Terminal (dark cinematic theme)
+   HOMEPAGE — Living terminal + warm paper UI
    ══════════════════════════════════════════════════════════════════════════ */
 
 .homepage {
   --hp-bg: #f6efe5;
   --hp-bg-panel: #efe3d1;
-  --hp-terminal-green: #2c7a4b;
+  --hp-terminal-green: #1a6b42;
+  --hp-terminal-warn: #b85a28;
   --hp-accent: #d45b2b;
   --hp-accent-warm: #ea8455;
   --hp-text: #2c2218;
@@ -765,10 +766,12 @@ body::before {
   --hp-text-dim: #6f5e4b;
   --hp-border: rgba(84, 60, 34, 0.16);
   --hp-glow: 0 0 20px rgba(212, 91, 43, 0.12);
-  --hp-terminal-bg: #1e1611;
-  --hp-terminal-panel: #2a1d15;
-  --hp-terminal-text: #f4ede4;
-  --hp-terminal-dim: #b8a38f;
+  --hp-terminal-bg: #ddd4c8;
+  --hp-terminal-panel: #ebe4d9;
+  --hp-terminal-text: #1a140e;
+  --hp-terminal-dim: #5c4f42;
+  --hp-terminal-header-bg: #e8e2d8;
+  --hp-terminal-footer-bg: #e0d8ce;
   --hp-font-headline: 'Syne', 'Instrument Sans', sans-serif;
   --hp-font-hero-title: 'Instrument Sans', 'Helvetica Neue', sans-serif;
   --hp-font-mono: 'DM Mono', 'Courier New', monospace;
@@ -996,11 +999,14 @@ body::before {
 .hp-terminal-window {
   width: min(920px, 90vw);
   max-height: 80vh;
-  border: 1px solid rgba(84, 60, 34, 0.28);
+  border: 1px solid rgba(84, 60, 34, 0.22);
   border-radius: 12px;
   overflow: hidden;
   background: var(--hp-terminal-panel);
-  box-shadow: var(--hp-glow), 0 0 60px rgba(212, 91, 43, 0.05), 0 20px 60px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    var(--hp-glow),
+    0 0 48px rgba(212, 91, 43, 0.06),
+    0 18px 44px rgba(44, 34, 24, 0.1);
 }
 
 .hp-terminal-header {
@@ -1008,8 +1014,8 @@ body::before {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: rgba(30, 22, 17, 0.9);
-  border-bottom: 1px solid rgba(84, 60, 34, 0.28);
+  background: var(--hp-terminal-header-bg);
+  border-bottom: 1px solid rgba(84, 60, 34, 0.14);
 }
 
 .hp-terminal-dots {
@@ -1060,11 +1066,11 @@ body::before {
 }
 
 .hp-term-line.term-success {
-  color: #4daa6b;
+  color: var(--hp-terminal-green);
 }
 
 .hp-term-line.term-warn {
-  color: #f0a45d;
+  color: var(--hp-terminal-warn);
 }
 
 .hp-term-line.term-accent {
@@ -1209,9 +1215,9 @@ body::before {
 
 /* ── Terminal CTA footer (install prompt) ── */
 .hp-terminal-cta-footer {
-  border-top: 1px solid rgba(84, 60, 34, 0.2);
+  border-top: 1px solid rgba(84, 60, 34, 0.14);
   padding: 12px 16px;
-  background: rgba(30, 22, 17, 0.6);
+  background: var(--hp-terminal-footer-bg);
   border-radius: 0 0 12px 12px;
 }
 
@@ -1470,7 +1476,8 @@ body::before {
 }
 
 .hp-step-term-line.term-cmd { color: var(--hp-terminal-text); }
-.hp-step-term-line.term-success { color: #4daa6b; }
+.hp-step-term-line.term-success { color: var(--hp-terminal-green); }
+.hp-step-term-line.term-warn { color: var(--hp-terminal-warn); }
 .hp-step-term-line.term-accent { color: var(--hp-accent); }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1490,11 +1497,11 @@ body::before {
 
 /* ── Code block (dark variant) ── */
 .hp-code-block {
-  border: 1px solid rgba(84, 60, 34, 0.2);
+  border: 1px solid rgba(84, 60, 34, 0.18);
   border-radius: 12px;
   overflow: hidden;
   background: var(--hp-terminal-bg);
-  box-shadow: 0 4px 24px rgba(44, 34, 24, 0.15), var(--hp-glow);
+  box-shadow: 0 4px 20px rgba(44, 34, 24, 0.08), var(--hp-glow);
 }
 
 .hp-code-block--hero {
@@ -1506,8 +1513,8 @@ body::before {
   align-items: center;
   gap: 6px;
   padding: 10px 16px;
-  background: rgba(30, 22, 17, 0.9);
-  border-bottom: 1px solid rgba(84, 60, 34, 0.2);
+  background: var(--hp-terminal-header-bg);
+  border-bottom: 1px solid rgba(84, 60, 34, 0.14);
 }
 
 .hp-code-dots {
