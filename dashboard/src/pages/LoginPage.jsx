@@ -39,8 +39,8 @@ export default function LoginPage() {
         <div className="hp-login-card">
           <h3>Log in to the dashboard</h3>
           <p>
-            Paste the seat key your agent generated during <code>gsync signup</code> or <code>gsync join</code>.
-            Don't have one? Ask your agent to run the gsync skill — it will create a team and give you the key.
+            Paste the durable seat key created during <code>gsync signup</code> or <code>gsync join</code>.
+            If you do not have one yet, ask your agent to run the gsync skill so it can create or join the team first.
           </p>
           <form className="hp-login-form" onSubmit={handleLogin}>
             <input
@@ -66,7 +66,7 @@ export default function LoginPage() {
           <a href="https://github.com/nwang783/nomergeconflicts" target="_blank" rel="noopener noreferrer">GitHub</a>
           <a href="https://github.com/nwang783/gsync/blob/main/SKILL.md" target="_blank" rel="noopener noreferrer">SKILL.md</a>
         </div>
-        <div className="hp-footer-copy">the coordination layer for a team of agentic coders</div>
+        <div className="hp-footer-copy">coordination layer for small engineering teams coding with AI</div>
       </footer>
     </div>
   );

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { initializeApp, deleteApp } from 'firebase/app';
 import {
   getFirestore,
+  connectFirestoreEmulator,
   terminate,
   doc,
   collection,
@@ -29,6 +30,11 @@ export function initFirebase(config) {
     projectId: config.projectId,
   });
   db = getFirestore(app);
+  if (config.useEmulators) {
+    const [host, portRaw] = String(config.firestoreHost || '127.0.0.1:8080').split(':');
+    const port = Number.parseInt(portRaw || '8080', 10);
+    connectFirestoreEmulator(db, host, port);
+  }
 }
 
 export function getDb() {

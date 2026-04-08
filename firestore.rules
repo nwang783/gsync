@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function teamMember(teamId) {
+      return signedIn()
+        && request.auth.token.teamId == teamId
+        && exists(/databases/$(database)/documents/teams/$(teamId)/memberships/$(request.auth.uid));
+    }
+
+    function teamAdmin(teamId) {
+      return teamMember(teamId)
+        && get(/databases/$(database)/documents/teams/$(teamId)/memberships/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /teams/{teamId} {
+      allow read: if teamMember(teamId);
+      allow write: if false;
+
+      match /meta/{docId} {
+        allow read, write: if teamMember(teamId);
+      }
+
+      match /plans/{planId} {
+        allow read, write: if teamMember(teamId);
+
+        match /content/{contentId} {
+          allow read, write: if teamMember(teamId);
+        }
+      }
+
+      match /memberships/{seatId} {
+        allow read: if teamMember(teamId);
+        allow write: if false;
+      }
+
+      match /joinCodes/{joinCodeId} {
+        allow read, write: if teamAdmin(teamId);
+      }
+    }
+
+    match /seats/{seatId} {
+      allow read: if signedIn() && request.auth.uid == seatId;
+      allow write: if false;
+    }
+  }
+}

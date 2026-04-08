@@ -5,3 +5,5 @@ dashboard/dist/
 dashboard/.env
 .agents
 .DS_Store
+.gstack/
+*.log

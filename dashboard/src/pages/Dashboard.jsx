@@ -7,9 +7,18 @@ import UpdateFeed from '../components/UpdateFeed.jsx';
 import PlanDetail from '../components/PlanDetail.jsx';
 
 export default function Dashboard() {
-  const { teamId, role, logout } = useAuth();
+  const { teamId, role, logout, loading } = useAuth();
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [activePage, setActivePage] = useState('overview');
+
+  if (loading || !teamId) {
+    return (
+      <div className="page-placeholder">
+        <div className="placeholder-icon">&gt;_</div>
+        <div className="placeholder-title">loading workspace...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">

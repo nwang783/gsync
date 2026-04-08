@@ -6,7 +6,11 @@
     "gsync": "./bin/gsync.js"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:dashboard": "npm --prefix dashboard test",
+    "build:dashboard": "npm --prefix dashboard run build",
+    "dev:dashboard": "npm --prefix dashboard run dev",
+    "emulators": "firebase emulators:start --only auth,firestore,functions,hosting"
   },
   "dependencies": {
     "firebase": "^11.0.0",
