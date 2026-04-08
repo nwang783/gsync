@@ -1,17 +1,13 @@
-const crypto = require("crypto");
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 const express = require("express");
 const cors = require("cors");
 const { v4: uuidv4 } = require("uuid");
+const { generateJoinCode, sha256 } = require("./join-codes");
 
 admin.initializeApp();
 const db = admin.firestore();
-
-function sha256(value) {
-  return crypto.createHash("sha256").update(value).digest("hex");
-}
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -30,7 +26,9 @@ app.post("/teams", async (req, res) => {
     const teamId = uuidv4();
     const seatId = uuidv4();
     const seatKey = uuidv4();
+    const joinCode = generateJoinCode();
     const keyHash = sha256(seatKey);
+    const joinCodeRef = db.doc(`teams/${teamId}/joinCodes/${uuidv4()}`);
     const now = FieldValue.serverTimestamp();
 
     const batch = db.batch();
@@ -56,6 +54,14 @@ app.post("/teams", async (req, res) => {
       lastLoginAt: now,
     });
 
+    batch.set(joinCodeRef, {
+      codeHash: sha256(joinCode),
+      role: "member",
+      uses: 0,
+      createdAt: now,
+      createdBySeatId: seatId,
+    });
+
     await batch.commit();
 
     const firebaseToken = await admin.auth().createCustomToken(seatId, {
@@ -63,7 +69,7 @@ app.post("/teams", async (req, res) => {
       role: "admin",
     });
 
-    return res.status(201).json({ teamId, seatId, seatName, role: "admin", seatKey, firebaseToken });
+    return res.status(201).json({ teamId, seatId, seatName, role: "admin", seatKey, joinCode, firebaseToken });
   } catch (err) {
     console.error("POST /teams error:", err);
     return res.status(500).json({ error: "Internal server error" });

@@ -15,6 +15,8 @@ Today the project includes:
 - a local sync step that generates agent-readable summary context files
 - a dashboard for team visibility
 
+The published CLI is intended to work without local source code or a manual `gsync init` step. By default it bootstraps itself against the hosted `nomergeconflicts` Firebase project. If you are self-hosting or testing a different environment, override those defaults with `GSYNC_API_BASE_URL`, `GSYNC_FIREBASE_PROJECT_ID`, and `GSYNC_FIREBASE_API_KEY`, or run `gsync init`.
+
 ## Inspiration
 
 AI agents can now write quality code quickly. Using skills like [gstack](), us developers can build high quality plans that turn into real working and tested features. However, the issue of syncronization quickly becomes apparent as soon as multiple people on a team start agentic coding. The real cost doesn't come from syntax merge conflicts but rather mental model drift in the minds of the developers. 
@@ -118,6 +120,9 @@ flowchart LR
 The intended happy-path command sequence for an agent is:
 
 ```bash
+gsync signup --team claw-social --seat-name nathan-laptop
+gsync join --code XXXX-XXXX-XXXX --seat-name teammate-mbp
+gsync login --key <seat-key>
 gsync sync --last 20
 cat ~/.gsync/CONTEXT.md
 gsync plan pull <id>              # only if a summary looks relevant

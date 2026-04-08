@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { fileURLToPath } from 'url';
-import { loadConfig, saveConfig, loadSession, saveSession, clearSession, ensureDirs, PLANS_DIR, CONFIG_FILE, CONTEXT_FILE, INDEX_FILE, SKILL_FILE } from './config.js';
+import { loadConfig, saveConfig, loadSession, saveSession, clearSession, ensureDirs, PLANS_DIR, CONFIG_FILE, CONTEXT_FILE, INDEX_FILE, SKILL_FILE, getDefaultConfig, hasConfigFile } from './config.js';
 import { initFirebase, cleanup, getTeamMeta, setTeamMeta, getPlanContent, getPlanSummary, getRecentPlans, updatePlanNote, updatePlanStatus, getActivePlans, upsertPlanContent } from './firestore.js';
 import { generateContext } from './context.js';
 import { formatPlanSummary, formatPlanSummaryDetail, formatRelativeTime, parseDuration } from './format.js';
@@ -73,6 +73,30 @@ function writeLocalPlanFile(summary, content) {
 function loadIndex() {
   if (!fs.existsSync(INDEX_FILE)) return null;
   return JSON.parse(fs.readFileSync(INDEX_FILE, 'utf-8'));
+}
+
+function isLocalApiBaseUrl(apiBaseUrl) {
+  try {
+    const url = new URL(apiBaseUrl);
+    return ['127.0.0.1', 'localhost'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function sameBackend(a, b) {
+  return a.apiBaseUrl === b.apiBaseUrl
+    && a.firebaseProjectId === b.firebaseProjectId
+    && a.firebaseApiKey === b.firebaseApiKey
+    && Boolean(a.useEmulators) === Boolean(b.useEmulators);
+}
+
+function resolveOnboardingConfig() {
+  const config = loadConfig();
+  if (!hasConfigFile()) {
+    saveConfig(config);
+  }
+  return config;
 }
 
 // --- gsync init ---
@@ -506,6 +530,23 @@ async function apiPost(config, endpoint, body) {
   return res.json();
 }
 
+async function apiPostWithFallback(config, endpoint, body) {
+  try {
+    const data = await apiPost(config, endpoint, body);
+    return { data, config, fellBackToHosted: false };
+  } catch (err) {
+    const hostedConfig = getDefaultConfig();
+    if (!isLocalApiBaseUrl(config.apiBaseUrl) || sameBackend(config, hostedConfig)) {
+      throw err;
+    }
+
+    verbose(`Onboarding request failed against local backend (${config.apiBaseUrl}). Retrying hosted backend (${hostedConfig.apiBaseUrl}).`);
+    const data = await apiPost(hostedConfig, endpoint, body);
+    saveConfig(hostedConfig);
+    return { data, config: hostedConfig, fellBackToHosted: true };
+  }
+}
+
 async function firebaseSignIn(config, customToken) {
   const { getAuth, signInWithCustomToken, connectAuthEmulator } = await import('firebase/auth');
   initFirebase({
@@ -529,14 +570,10 @@ program
   .requiredOption('--seat-name <name>', 'name for this seat/machine')
   .action(async (opts) => {
     try {
-      const config = loadConfig();
-      if (!config || !config.apiBaseUrl) {
-        console.error(chalk.red('No config found. Run `gsync init` with API settings first, or set up ~/.gsync/config.json with apiBaseUrl, firebaseProjectId, and firebaseApiKey.'));
-        process.exit(1);
-      }
+      const config = resolveOnboardingConfig();
 
       verbose('Creating team...');
-      const data = await apiPost(config, '/teams', { teamName: opts.team, seatName: opts.seatName });
+      const { data, config: activeConfig, fellBackToHosted } = await apiPostWithFallback(config, '/teams', { teamName: opts.team, seatName: opts.seatName });
 
       const session = {
         teamId: data.teamId,
@@ -547,11 +584,15 @@ program
       };
 
       if (data.firebaseToken) {
-        await firebaseSignIn(config, data.firebaseToken);
+        await firebaseSignIn(activeConfig, data.firebaseToken);
       }
+      saveConfig(activeConfig);
       saveSession(session);
 
       console.log(chalk.green('✓ Team created!'));
+      if (fellBackToHosted) {
+        console.log(chalk.yellow(`  Switched onboarding to hosted backend: ${activeConfig.apiBaseUrl}`));
+      }
       console.log(chalk.cyan(`  Team ID: ${data.teamId}`));
       console.log(chalk.cyan(`  Seat ID: ${data.seatId}`));
       console.log('');
@@ -576,14 +617,10 @@ program
   .requiredOption('--seat-name <name>', 'name for this seat/machine')
   .action(async (opts) => {
     try {
-      const config = loadConfig();
-      if (!config || !config.apiBaseUrl) {
-        console.error(chalk.red('No config found. Set up ~/.gsync/config.json with apiBaseUrl, firebaseProjectId, and firebaseApiKey.'));
-        process.exit(1);
-      }
+      const config = resolveOnboardingConfig();
 
       verbose('Joining team...');
-      const data = await apiPost(config, '/teams/join', { joinCode: opts.code, seatName: opts.seatName });
+      const { data, config: activeConfig, fellBackToHosted } = await apiPostWithFallback(config, '/teams/join', { joinCode: opts.code, seatName: opts.seatName });
 
       const session = {
         teamId: data.teamId,
@@ -594,11 +631,15 @@ program
       };
 
       if (data.firebaseToken) {
-        await firebaseSignIn(config, data.firebaseToken);
+        await firebaseSignIn(activeConfig, data.firebaseToken);
       }
+      saveConfig(activeConfig);
       saveSession(session);
 
       console.log(chalk.green('✓ Joined team!'));
+      if (fellBackToHosted) {
+        console.log(chalk.yellow(`  Switched onboarding to hosted backend: ${activeConfig.apiBaseUrl}`));
+      }
       console.log(chalk.cyan(`  Team ID: ${data.teamId}`));
       console.log(chalk.cyan(`  Seat ID: ${data.seatId}`));
       console.log('');
@@ -618,14 +659,10 @@ program
   .requiredOption('--key <seat-key>', 'your seat key')
   .action(async (opts) => {
     try {
-      const config = loadConfig();
-      if (!config || !config.apiBaseUrl) {
-        console.error(chalk.red('No config found. Set up ~/.gsync/config.json with apiBaseUrl, firebaseProjectId, and firebaseApiKey.'));
-        process.exit(1);
-      }
+      const config = resolveOnboardingConfig();
 
       verbose('Logging in...');
-      const data = await apiPost(config, '/agent/login', { seatKey: opts.key });
+      const { data, config: activeConfig, fellBackToHosted } = await apiPostWithFallback(config, '/agent/login', { seatKey: opts.key });
 
       const session = {
         teamId: data.teamId,
@@ -636,11 +673,15 @@ program
       };
 
       if (data.firebaseToken) {
-        await firebaseSignIn(config, data.firebaseToken);
+        await firebaseSignIn(activeConfig, data.firebaseToken);
       }
+      saveConfig(activeConfig);
       saveSession(session);
 
       console.log(chalk.green(`✓ Logged in as ${session.seatName}`));
+      if (fellBackToHosted) {
+        console.log(chalk.yellow(`  Switched onboarding to hosted backend: ${activeConfig.apiBaseUrl}`));
+      }
       console.log(chalk.cyan(`  Team: ${session.teamId}`));
       console.log(chalk.cyan(`  Role: ${session.role}`));
     } catch (err) {

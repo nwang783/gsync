@@ -70,6 +70,10 @@ gsync --help
 
 gsync no longer expects end users to configure raw Firebase project credentials.
 
+The npm-distributed CLI should work even for agents that only install `gsync-cli` and do not have this repo checked out. It auto-bootstraps to the hosted `nomergeconflicts` backend by default. Only use `gsync init` if you are intentionally pointing at a different backend or local emulators.
+
+For the normal hosted product flow, users and agents should not need to know any Firebase config at all. No project ID, API key, emulator host, or local source checkout should be required.
+
 The product-facing onboarding flow is:
 
 ```bash
@@ -89,8 +93,13 @@ gsync logout
 Important:
 
 - `signup` creates a team and the first admin seat
+- `signup` should automatically bootstrap the CLI to the hosted backend
+- `signup` should return both a durable seat key and a teammate join code
 - `join` redeems a one-time or limited-use join code
+- `join` should automatically use the hosted backend with no manual config
+- `join` should return a durable seat key for the new seat
 - `login` exchanges a durable seat key for a Firebase session
+- `login` should automatically use the hosted backend with no manual config
 - humans can use the browser dashboard with a seat key too
 
 Browser access follows the same model:
@@ -100,6 +109,16 @@ Browser access follows the same model:
 - get routed into the authenticated dashboard
 
 The durable seat key is the credential to keep safe. The join code is only for onboarding.
+
+Expected zero-config happy path:
+
+```bash
+gsync signup --team claw-social --seat-name nathan-laptop
+gsync join --code XXXX-XXXX-XXXX --seat-name teammate-mbp
+gsync login --key <seat-key>
+```
+
+That hosted flow should work for agents that only installed the CLI from npm. `gsync init` is an override mechanism, not part of the normal onboarding path.
 
 ---
 
