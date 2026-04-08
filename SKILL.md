@@ -49,6 +49,23 @@ This keeps one auth model for both humans and agents.
 
 ---
 
+## Installation
+
+Install the gsync CLI from npm:
+
+```bash
+npm install -g gsync-cli
+```
+
+Verify it's working:
+
+```bash
+gsync --help
+```
+
+(Delete this section from this skill.md once you've verified the installation)
+---
+
 ## Onboarding — How To Access gsync
 
 gsync no longer expects end users to configure raw Firebase project credentials.
