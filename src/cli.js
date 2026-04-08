@@ -27,12 +27,50 @@ function verbose(...args) {
 function friendlyError(err) {
   const code = err.code || '';
   if (code.includes('permission-denied')) return 'Authentication failed. Run `gsync signup`, `gsync join`, or `gsync login` to reconfigure.';
+  if (code.includes('unauthenticated')) return 'Authentication expired. Run `gsync login --key <seat-key>` to restore this machine session.';
   if (code.includes('unavailable') || code.includes('network') || err.message?.includes('fetch')) return 'Cannot reach Firestore. Check your connection and retry.';
   if (code.includes('not-found')) return 'Resource not found. Check your team ID.';
   return err.message;
 }
 
-function requireConfig() {
+function buildSession(data, overrides = {}) {
+  return {
+    teamId: data.teamId,
+    seatId: data.seatId,
+    seatName: overrides.seatName || data.seatName || data.seatId,
+    role: overrides.role || data.role || 'member',
+    seatKey: overrides.seatKey || data.seatKey || null,
+    lastLoginAt: new Date().toISOString(),
+  };
+}
+
+async function restoreFirebaseAuth(config, session) {
+  if (!session.seatKey) {
+    throw new Error('Local session is missing a seat key. Run `gsync login --key <seat-key>` once to upgrade this machine.');
+  }
+
+  const { data, config: activeConfig } = await apiPostWithFallback(config, '/agent/login', {
+    seatKey: session.seatKey,
+  });
+
+  if (!data.firebaseToken) {
+    throw new Error('Login response did not include a Firebase token.');
+  }
+
+  await firebaseSignIn(activeConfig, data.firebaseToken);
+
+  const nextSession = buildSession(data, {
+    seatKey: session.seatKey,
+    seatName: session.seatName || data.seatName,
+    role: data.role || session.role,
+  });
+
+  saveConfig(activeConfig);
+  saveSession(nextSession);
+  return { config: activeConfig, session: nextSession };
+}
+
+async function requireConfig() {
   const config = loadConfig();
   if (!config) {
     console.error(chalk.red('Not initialized. Run `gsync signup`, `gsync join`, or `gsync login` first.'));
@@ -45,8 +83,7 @@ function requireConfig() {
   }
   verbose('Config loaded:', JSON.stringify(config, null, 2));
   verbose('Session loaded:', JSON.stringify(session, null, 2));
-  initFirebase({ apiKey: config.firebaseApiKey, projectId: config.firebaseProjectId });
-  return { config, session };
+  return restoreFirebaseAuth(config, session);
 }
 
 function slugify(str) {
@@ -187,7 +224,7 @@ program
   .option('--last <count>', 'number of recent plans to include', '20')
   .action(async (opts) => {
     try {
-      const { session } = requireConfig();
+      const { session } = await requireConfig();
       ensureDirs();
       const recentCount = Number.parseInt(opts.last ?? '20', 10);
 
@@ -236,7 +273,7 @@ planCmd
   .requiredOption('--note <text>', 'update note')
   .action(async (id, opts) => {
     try {
-      const { session } = requireConfig();
+      const { session } = await requireConfig();
       verbose('Updating plan:', id);
       await updatePlanNote(session.teamId, id, opts.note, session.seatName);
       console.log(chalk.green(`✓ Note added to plan ${id}`));
@@ -258,7 +295,7 @@ planCmd
   .option('--status <status>', 'status override')
   .action(async (file, opts) => {
     try {
-      const { session } = requireConfig();
+      const { session } = await requireConfig();
       const raw = fs.readFileSync(path.resolve(file), 'utf-8');
       const parsed = parsePlanFile(raw);
       const summary = opts.summary || parsed.metadata.summary;
@@ -315,7 +352,7 @@ planCmd
         console.error(chalk.red('PR URL must start with http:// or https://'));
         process.exit(1);
       }
-      const { session } = requireConfig();
+      const { session } = await requireConfig();
       verbose('Setting plan to review:', id);
       const extra = opts.pr ? { prUrl: opts.pr } : {};
       await updatePlanStatus(session.teamId, id, 'review', extra);
@@ -336,7 +373,7 @@ planCmd
   .description('Mark plan as merged')
   .action(async (id) => {
     try {
-      const { session } = requireConfig();
+      const { session } = await requireConfig();
       verbose('Setting plan to merged:', id);
       await updatePlanStatus(session.teamId, id, 'merged');
       console.log(chalk.green(`✓ Plan ${id} marked as merged`));
@@ -355,7 +392,7 @@ planCmd
   .option('--stdout', 'print the full canonical markdown body instead of writing a file')
   .action(async (id, opts) => {
     try {
-      const { session } = requireConfig();
+      const { session } = await requireConfig();
       const summary = await getPlanSummary(session.teamId, id);
       if (!summary) {
         throw new Error(`Plan ${id} not found.`);
@@ -400,7 +437,7 @@ goalsCmd
   .requiredOption('--goal <text>', 'the 2-week goal')
   .action(async (opts) => {
     try {
-      const { session } = requireConfig();
+      const { session } = await requireConfig();
       verbose('Setting 2-week goal');
       await setTeamMeta(session.teamId, '2week', opts.goal, session.seatName);
       console.log(chalk.green('✓ 2-week goal updated'));
@@ -417,7 +454,7 @@ goalsCmd
   .requiredOption('--goal <text>', 'the 3-day target')
   .action(async (opts) => {
     try {
-      const { session } = requireConfig();
+      const { session } = await requireConfig();
       verbose('Setting 3-day target');
       await setTeamMeta(session.teamId, '3day', opts.goal, session.seatName);
       console.log(chalk.green('✓ 3-day target updated'));
@@ -456,7 +493,7 @@ program
   .option('--since <duration>', 'time window (e.g. 24h, 7d, 1w)', '24h')
   .action(async (opts) => {
     try {
-      const { session } = requireConfig();
+      const { session } = await requireConfig();
       const durationMs = parseDuration(opts.since);
       const cutoff = Date.now() - durationMs;
 
@@ -575,13 +612,11 @@ program
       verbose('Creating team...');
       const { data, config: activeConfig, fellBackToHosted } = await apiPostWithFallback(config, '/teams', { teamName: opts.team, seatName: opts.seatName });
 
-      const session = {
-        teamId: data.teamId,
-        seatId: data.seatId,
+      const session = buildSession(data, {
         seatName: opts.seatName,
         role: data.role || 'admin',
-        lastLoginAt: new Date().toISOString(),
-      };
+        seatKey: data.seatKey,
+      });
 
       if (data.firebaseToken) {
         await firebaseSignIn(activeConfig, data.firebaseToken);
@@ -622,13 +657,11 @@ program
       verbose('Joining team...');
       const { data, config: activeConfig, fellBackToHosted } = await apiPostWithFallback(config, '/teams/join', { joinCode: opts.code, seatName: opts.seatName });
 
-      const session = {
-        teamId: data.teamId,
-        seatId: data.seatId,
+      const session = buildSession(data, {
         seatName: opts.seatName,
         role: data.role || 'member',
-        lastLoginAt: new Date().toISOString(),
-      };
+        seatKey: data.seatKey,
+      });
 
       if (data.firebaseToken) {
         await firebaseSignIn(activeConfig, data.firebaseToken);
@@ -664,13 +697,9 @@ program
       verbose('Logging in...');
       const { data, config: activeConfig, fellBackToHosted } = await apiPostWithFallback(config, '/agent/login', { seatKey: opts.key });
 
-      const session = {
-        teamId: data.teamId,
-        seatId: data.seatId,
-        seatName: data.seatName || data.seatId,
-        role: data.role,
-        lastLoginAt: new Date().toISOString(),
-      };
+      const session = buildSession(data, {
+        seatKey: opts.key,
+      });
 
       if (data.firebaseToken) {
         await firebaseSignIn(activeConfig, data.firebaseToken);

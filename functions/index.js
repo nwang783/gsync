@@ -10,13 +10,14 @@ admin.initializeApp();
 const db = admin.firestore();
 
 const app = express();
+const router = express.Router();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
 // ---------------------------------------------------------------------------
 // POST /teams — create a new team + first admin seat
 // ---------------------------------------------------------------------------
-app.post("/teams", async (req, res) => {
+router.post("/teams", async (req, res) => {
   try {
     const { teamName, seatName } = req.body;
     if (!teamName || !seatName) {
@@ -79,7 +80,7 @@ app.post("/teams", async (req, res) => {
 // ---------------------------------------------------------------------------
 // POST /teams/join — join an existing team via a join code
 // ---------------------------------------------------------------------------
-app.post("/teams/join", async (req, res) => {
+router.post("/teams/join", async (req, res) => {
   try {
     const { joinCode, seatName } = req.body;
     if (!joinCode || !seatName) {
@@ -161,7 +162,7 @@ app.post("/teams/join", async (req, res) => {
 // ---------------------------------------------------------------------------
 // POST /agent/login — exchange a durable seat key for a Firebase token
 // ---------------------------------------------------------------------------
-app.post("/agent/login", async (req, res) => {
+router.post("/agent/login", async (req, res) => {
   try {
     const { seatKey } = req.body;
     if (!seatKey) {
@@ -212,5 +213,10 @@ app.post("/agent/login", async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// Support both direct function URLs (`/agent/login`) and Hosting rewrites that
+// preserve the `/api` prefix (`/api/agent/login`).
+app.use(router);
+app.use("/api", router);
 
 exports.api = functions.https.onRequest(app);
