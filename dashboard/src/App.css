@@ -766,12 +766,13 @@ body::before {
   --hp-text-dim: #6f5e4b;
   --hp-border: rgba(84, 60, 34, 0.16);
   --hp-glow: 0 0 20px rgba(212, 91, 43, 0.12);
-  --hp-terminal-bg: #ddd4c8;
   --hp-terminal-panel: #ebe4d9;
+  --hp-terminal-bg: var(--hp-terminal-panel);
   --hp-terminal-text: #1a140e;
   --hp-terminal-dim: #5c4f42;
   --hp-terminal-header-bg: #e8e2d8;
   --hp-terminal-footer-bg: #e0d8ce;
+  --hp-terminal-radius: 12px;
   --hp-font-headline: 'Syne', 'Instrument Sans', sans-serif;
   --hp-font-hero-title: 'Instrument Sans', 'Helvetica Neue', sans-serif;
   --hp-font-mono: 'DM Mono', 'Courier New', monospace;
@@ -936,7 +937,7 @@ body::before {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--hp-terminal-bg);
+  background: var(--hp-terminal-panel);
   transition: opacity 0.6s ease;
   cursor: pointer;
 }
@@ -954,25 +955,25 @@ body::before {
 
 @keyframes terminalShatter {
   0% {
-    clip-path: inset(0 0 0 0);
+    clip-path: inset(0 0 0 0 round var(--hp-terminal-radius));
     opacity: 1;
     transform: scale(1);
     filter: brightness(1);
   }
   15% {
-    filter: brightness(2.5);
+    filter: brightness(1.12);
   }
   40% {
-    clip-path: inset(0 0 0 0);
+    clip-path: inset(0 0 0 0 round var(--hp-terminal-radius));
     opacity: 1;
     transform: scale(1.02);
     filter: brightness(1);
   }
   100% {
-    clip-path: inset(50% 50% 50% 50%);
+    clip-path: inset(50% 50% 50% 50% round var(--hp-terminal-radius));
     opacity: 0;
     transform: scale(0.9);
-    filter: brightness(0.5);
+    filter: brightness(1);
   }
 }
 
@@ -1000,7 +1001,7 @@ body::before {
   width: min(920px, 90vw);
   max-height: 80vh;
   border: 1px solid rgba(84, 60, 34, 0.22);
-  border-radius: 12px;
+  border-radius: var(--hp-terminal-radius);
   overflow: hidden;
   background: var(--hp-terminal-panel);
   box-shadow:
@@ -1218,7 +1219,7 @@ body::before {
   border-top: 1px solid rgba(84, 60, 34, 0.14);
   padding: 12px 16px;
   background: var(--hp-terminal-footer-bg);
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--hp-terminal-radius) var(--hp-terminal-radius);
 }
 
 .hp-terminal-cta-label {
