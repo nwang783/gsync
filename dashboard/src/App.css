@@ -849,7 +849,6 @@ body::before {
   letter-spacing: 2px;
   color: var(--accent);
   margin-bottom: 20px;
-  opacity: 0.7;
 }
 
 .hp-hero-title {
@@ -1174,6 +1173,51 @@ body::before {
   letter-spacing: 0.3px;
 }
 
+/* ── Homepage reveal animations ── */
+.hp-hero-left,
+.hp-hero-right,
+.hp-how-flow {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+.hp-reveal {
+  animation: hpReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.hp-reveal--delay {
+  animation-delay: 200ms;
+}
+
+@keyframes hpReveal {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hp-how-flow.hp-reveal .hp-how-step {
+  animation: hpStepReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes hpStepReveal {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ── Copy button copied state ── */
+.hp-copy-btn--copied {
+  background: rgba(58, 171, 92, 0.1);
+  border-color: rgba(58, 171, 92, 0.4);
+  color: var(--status-merged);
+}
+
 /* ── Homepage responsive ── */
 @media (max-width: 860px) {
   .hp-nav {
@@ -1188,6 +1232,7 @@ body::before {
     flex-direction: column;
     padding: 120px 24px 60px;
     gap: 32px;
+    min-height: auto;
   }
 
   .hp-hero-right {
