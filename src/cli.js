@@ -15,7 +15,7 @@ const program = new Command();
 program
   .name('gsync')
   .description('Team sync CLI for coordinating plans via Firestore')
-  .version('1.0.0')
+  .version('1.0.3')
   .option('--verbose', 'enable debug logging');
 
 function verbose(...args) {
