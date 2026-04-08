@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { getAuth, signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
+import { signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from './firebase.js';
 
 const AuthContext = createContext(null);
 
@@ -10,7 +11,6 @@ export function AuthProvider({ children }) {
   const [claimsReady, setClaimsReady] = useState(false);
 
   useEffect(() => {
-    const auth = getAuth();
     const unsub = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
@@ -50,7 +50,6 @@ export function AuthProvider({ children }) {
       throw new Error(data.error || 'Login failed');
     }
     const data = await res.json();
-    const auth = getAuth();
     await signInWithCustomToken(auth, data.firebaseToken);
     setTeamId(data.teamId);
     setRole(data.role);
@@ -58,7 +57,6 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    const auth = getAuth();
     await signOut(auth);
   };
 
