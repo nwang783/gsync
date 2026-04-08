@@ -6,7 +6,7 @@ const NAV_ITEMS = [
   { id: 'activity', label: 'activity', icon: '$' },
 ];
 
-export default function Sidebar({ active, onNavigate }) {
+export default function Sidebar({ active, onNavigate, onLogout }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -50,6 +50,12 @@ export default function Sidebar({ active, onNavigate }) {
             <span className="sidebar-status-dot" />
             <span>connected</span>
           </div>
+          {onLogout && (
+            <button className="sidebar-link" onClick={onLogout} style={{ marginTop: '8px' }}>
+              <span className="sidebar-link-icon">×</span>
+              <span className="sidebar-link-label">logout</span>
+            </button>
+          )}
         </div>
       </aside>
     </>

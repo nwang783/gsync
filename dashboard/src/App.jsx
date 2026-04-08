@@ -1,62 +1,50 @@
-import { useState } from 'react';
-import Sidebar from './components/Sidebar.jsx';
-import GoalBar from './components/GoalBar.jsx';
-import TeamColumns from './components/TeamColumns.jsx';
-import UpdateFeed from './components/UpdateFeed.jsx';
-import PlanDetail from './components/PlanDetail.jsx';
+import { Suspense, lazy } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from './auth.jsx';
 
-const DEFAULT_TEAM_ID = 'default';
+const Homepage = lazy(() => import('./pages/Homepage.jsx'));
+const LoginPage = lazy(() => import('./pages/LoginPage.jsx'));
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 
-function getTeamId() {
-  if (typeof window !== 'undefined') {
-    const params = new URLSearchParams(window.location.search);
-    const team = params.get('team');
-    if (team) return team;
+function PagePlaceholder({ title = 'loading...' }) {
+  return (
+    <div className="page-placeholder" style={{ minHeight: '100vh', display: 'flex' }}>
+      <div className="placeholder-icon">&gt;_</div>
+      <div className="placeholder-title">{title}</div>
+    </div>
+  );
+}
+
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <PagePlaceholder />;
   }
-  return DEFAULT_TEAM_ID;
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
 }
 
 export default function App() {
-  const teamId = getTeamId();
-  const [selectedPlanId, setSelectedPlanId] = useState(null);
-  const [activePage, setActivePage] = useState('overview');
-
   return (
-    <div className="app-shell">
-      <Sidebar active={activePage} onNavigate={setActivePage} />
-
-      <main className="app-main">
-        <div className="app-header">
-          <h1>{activePage === 'overview' ? '# overview' : activePage === 'me' ? '# me' : '# activity'}</h1>
-          <span className="team-id">{teamId}</span>
-        </div>
-
-        {activePage === 'overview' && (
-          <>
-            <GoalBar teamId={teamId} />
-            <TeamColumns teamId={teamId} onSelectPlan={setSelectedPlanId} />
-            <UpdateFeed teamId={teamId} />
-          </>
-        )}
-
-        {activePage === 'me' && (
-          <div className="page-placeholder">
-            <div className="placeholder-icon">&gt;_</div>
-            <div className="placeholder-title">your workspace</div>
-            <div className="placeholder-desc">your plans, progress, and personal activity will live here.</div>
-          </div>
-        )}
-
-        {activePage === 'activity' && (
-          <>
-            <UpdateFeed teamId={teamId} />
-          </>
-        )}
-
-        {selectedPlanId && (
-          <PlanDetail planId={selectedPlanId} teamId={teamId} onClose={() => setSelectedPlanId(null)} />
-        )}
-      </main>
-    </div>
+    <Suspense fallback={<PagePlaceholder />}>
+      <Routes>
+        <Route path="/" element={<Homepage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/app"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   );
 }

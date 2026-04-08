@@ -1,0 +1,74 @@
+import { createContext, useContext, useState, useEffect } from 'react';
+import { getAuth, signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
+
+const AuthContext = createContext(null);
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(undefined); // undefined = loading, null = not authed
+  const [teamId, setTeamId] = useState(null);
+  const [role, setRole] = useState(null);
+  const [claimsReady, setClaimsReady] = useState(false);
+
+  useEffect(() => {
+    const auth = getAuth();
+    const unsub = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        setClaimsReady(false);
+        // Extract custom claims from the token
+        firebaseUser.getIdTokenResult()
+          .then((result) => {
+            setTeamId(result.claims.teamId || null);
+            setRole(result.claims.role || null);
+          })
+          .catch(() => {
+            setTeamId(null);
+            setRole(null);
+          })
+          .finally(() => {
+            setClaimsReady(true);
+          });
+      } else {
+        setUser(null);
+        setTeamId(null);
+        setRole(null);
+        setClaimsReady(true);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const login = async (seatKey) => {
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+    const res = await fetch(`${apiBaseUrl}/agent/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seatKey }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Login failed');
+    }
+    const data = await res.json();
+    const auth = getAuth();
+    await signInWithCustomToken(auth, data.firebaseToken);
+    setTeamId(data.teamId);
+    setRole(data.role);
+    return data;
+  };
+
+  const logout = async () => {
+    const auth = getAuth();
+    await signOut(auth);
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, teamId, role, login, logout, loading: user === undefined || (Boolean(user) && !claimsReady) }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  return useContext(AuthContext);
+}
