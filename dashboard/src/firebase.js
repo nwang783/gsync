@@ -3,9 +3,9 @@ import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
 import { connectAuthEmulator, getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  authDomain: `${import.meta.env.VITE_FIREBASE_PROJECT_ID || ''}.firebaseapp.com`,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyD3FJkbzXQiDZCDoDauqPUW07lszVpCVpU',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'nomergeconflicts',
+  authDomain: `${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'nomergeconflicts'}.firebaseapp.com`,
 };
 
 const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
