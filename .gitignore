@@ -7,3 +7,4 @@ dashboard/.env
 .DS_Store
 .gstack/
 *.log
+.firebase/

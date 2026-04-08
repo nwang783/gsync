@@ -1153,11 +1153,11 @@ body::before {
 
 .hp-hero {
   width: 100%;
-  max-width: min(1060px, 94vw);
+  max-width: min(1160px, 94vw);
   margin-inline: auto;
   display: flex;
-  align-items: center;
-  gap: 48px;
+  align-items: flex-start;
+  gap: clamp(40px, 5vw, 64px);
   opacity: 0;
   transform: translateY(40px);
 }
@@ -1206,12 +1206,58 @@ body::before {
 
 /* ── Hero terminal column (right) ── */
 .hp-hero-terminal-col {
-  flex: 0 0 420px;
-  max-width: 420px;
+  flex: 1 1 460px;
+  max-width: min(560px, 100%);
+  min-width: 0;
+  margin-top: clamp(18px, 3.5vw, 40px);
 }
 
 .hp-hero-terminal {
   width: 100%;
+}
+
+/* Hero install card: larger type (scoped to hero only); no flex gap — header + footer stack tight */
+.hp-terminal-window.hp-hero-terminal {
+  box-shadow:
+    var(--hp-glow),
+    0 0 56px rgba(212, 91, 43, 0.07),
+    0 22px 50px rgba(44, 34, 24, 0.09);
+}
+
+.hp-terminal-window.hp-hero-terminal .hp-terminal-header {
+  padding: 14px 18px;
+}
+
+.hp-terminal-window.hp-hero-terminal .hp-terminal-title {
+  font-size: 13px;
+}
+
+.hp-terminal-window.hp-hero-terminal .hp-terminal-cta-footer {
+  padding: 18px 20px;
+}
+
+.hp-terminal-window.hp-hero-terminal .hp-terminal-cta-label {
+  font-size: 11px;
+  letter-spacing: 0.65px;
+  margin-bottom: 10px;
+}
+
+.hp-terminal-window.hp-hero-terminal .hp-terminal-cta-cmd {
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.hp-terminal-window.hp-hero-terminal .hp-terminal-cta-row {
+  gap: 14px;
+}
+
+.hp-terminal-window.hp-hero-terminal .hp-copy-btn {
+  font-size: 12px;
+  padding: 5px 14px;
+}
+
+.hp-terminal-window.hp-hero-terminal .hp-terminal-cta-row .hp-copy-btn {
+  margin-top: 2px;
 }
 
 /* ── Terminal CTA footer (install prompt) ── */
@@ -2019,6 +2065,7 @@ body::before {
     flex: 0 0 auto;
     max-width: 100%;
     width: 100%;
+    margin-top: 8px;
   }
 
   .hp-hero-title {
