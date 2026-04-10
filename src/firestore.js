@@ -6,6 +6,7 @@ import {
   terminate,
   doc,
   collection,
+  addDoc,
   getDoc,
   setDoc,
   updateDoc,
@@ -66,6 +67,210 @@ export async function setTeamMeta(teamId, type, content, userName) {
     content,
     updatedAt: serverTimestamp(),
     updatedBy: userName,
+  });
+}
+
+// --- Memory layer ---
+
+function memoryDoc(teamId, docId) {
+  return doc(getDb(), 'teams', teamId, 'memory', docId);
+}
+
+function conversationDraftsCol(teamId) {
+  return collection(getDb(), 'teams', teamId, 'memory', 'conversationDrafts', 'items');
+}
+
+export async function getMemoryState(teamId) {
+  const snap = await getDoc(memoryDoc(teamId, 'state'));
+  if (!snap.exists()) return { revision: 0, latestMemoryUpdatedAt: null, compiledState: 'missing' };
+  return snap.data();
+}
+
+export async function getMemorySummary(teamId) {
+  const snap = await getDoc(memoryDoc(teamId, 'summary'));
+  if (!snap.exists()) return null;
+  return snap.data();
+}
+
+export async function getCompiledContextPack(teamId) {
+  const snap = await getDoc(memoryDoc(teamId, 'compiledContext'));
+  if (!snap.exists()) return null;
+  return snap.data();
+}
+
+export async function createConversationDraft(teamId, { title, body, tags = [] }, userName) {
+  const ref = await addDoc(conversationDraftsCol(teamId), {
+    title,
+    body,
+    tags,
+    state: 'draft',
+    createdAt: serverTimestamp(),
+    createdBy: userName,
+    updatedAt: serverTimestamp(),
+    updatedBy: userName,
+    approvedAt: null,
+    approvedBy: null,
+    promotedTo: null,
+  });
+
+  await updateMemorySummary(teamId);
+  return ref.id;
+}
+
+export async function promoteConversationDraft(teamId, draftId, { target, titleOverride = null }, userName) {
+  const draftRef = doc(conversationDraftsCol(teamId), draftId);
+
+  await runTransaction(getDb(), async (transaction) => {
+    const draftSnap = await transaction.get(draftRef);
+    if (!draftSnap.exists()) {
+      throw new Error(`Conversation draft ${draftId} not found.`);
+    }
+
+    const draft = draftSnap.data();
+    if (draft.state !== 'draft') {
+      throw new Error(`Conversation draft ${draftId} is already ${draft.state}.`);
+    }
+
+    const stateRef = memoryDoc(teamId, 'state');
+    const stateSnap = await transaction.get(stateRef);
+    const state = stateSnap.exists() ? stateSnap.data() : { revision: 0 };
+    const nextRevision = Number(state.revision || 0) + 1;
+
+    if (target === 'companyBrief') {
+      transaction.set(memoryDoc(teamId, 'companyBrief'), {
+        content: draft.body,
+        title: titleOverride || draft.title || 'Company brief',
+        approvedAt: serverTimestamp(),
+        approvedBy: userName,
+        sourceDraftId: draftId,
+      });
+    } else if (target === 'projectBrief') {
+      transaction.set(memoryDoc(teamId, 'projectBrief'), {
+        content: draft.body,
+        title: titleOverride || draft.title || 'Project brief',
+        approvedAt: serverTimestamp(),
+        approvedBy: userName,
+        sourceDraftId: draftId,
+      });
+    } else if (target === 'decisionLog') {
+      transaction.set(memoryDoc(teamId, 'decisionLog'), {
+        entries: arrayUnion({
+          summary: titleOverride || draft.title || 'Decision',
+          detail: draft.body,
+          sourceDraftId: draftId,
+          decidedAt: new Date().toISOString().slice(0, 10),
+          decidedBy: userName,
+        }),
+        updatedAt: serverTimestamp(),
+        updatedBy: userName,
+      }, { merge: true });
+    } else {
+      throw new Error(`Unsupported promotion target: ${target}`);
+    }
+
+    transaction.update(draftRef, {
+      state: 'approved',
+      approvedAt: serverTimestamp(),
+      approvedBy: userName,
+      promotedTo: target,
+      updatedAt: serverTimestamp(),
+      updatedBy: userName,
+    });
+
+    transaction.set(stateRef, {
+      revision: nextRevision,
+      latestMemoryUpdatedAt: serverTimestamp(),
+      latestMemoryUpdatedBy: userName,
+      compiledState: 'stale',
+      compiledAt: state.compiledAt || null,
+    }, { merge: true });
+  });
+
+  await updateMemorySummary(teamId);
+}
+
+export async function saveCompiledContextPack(teamId, pack, userName) {
+  const stateRef = memoryDoc(teamId, 'state');
+  await runTransaction(getDb(), async (transaction) => {
+    const stateSnap = await transaction.get(stateRef);
+    const state = stateSnap.exists() ? stateSnap.data() : { revision: 0 };
+    transaction.set(memoryDoc(teamId, 'compiledContext'), {
+      ...pack,
+      updatedAt: serverTimestamp(),
+      updatedBy: userName,
+    });
+    transaction.set(stateRef, {
+      revision: Number(state.revision || 0),
+      latestMemoryUpdatedAt: state.latestMemoryUpdatedAt || null,
+      latestMemoryUpdatedBy: state.latestMemoryUpdatedBy || null,
+      compiledState: pack.state,
+      compiledAt: serverTimestamp(),
+      compiledBy: userName,
+    }, { merge: true });
+  });
+
+  await updateMemorySummary(teamId);
+}
+
+export async function getApprovedMemory(teamId) {
+  const [companyBriefSnap, projectBriefSnap, decisionLogSnap, state] = await Promise.all([
+    getDoc(memoryDoc(teamId, 'companyBrief')),
+    getDoc(memoryDoc(teamId, 'projectBrief')),
+    getDoc(memoryDoc(teamId, 'decisionLog')),
+    getMemoryState(teamId),
+  ]);
+
+  return {
+    revision: Number(state.revision || 0),
+    latestMemoryUpdatedAt: state.latestMemoryUpdatedAt || null,
+    companyBrief: companyBriefSnap.exists() ? companyBriefSnap.data() : null,
+    projectBrief: projectBriefSnap.exists() ? projectBriefSnap.data() : null,
+    decisionLog: decisionLogSnap.exists() ? decisionLogSnap.data() : { entries: [] },
+  };
+}
+
+async function updateMemorySummary(teamId) {
+  const [companyBrief, projectBrief, decisionLog, state, compiled, draftSnap] = await Promise.all([
+    getDoc(memoryDoc(teamId, 'companyBrief')),
+    getDoc(memoryDoc(teamId, 'projectBrief')),
+    getDoc(memoryDoc(teamId, 'decisionLog')),
+    getMemoryState(teamId),
+    getCompiledContextPack(teamId),
+    getDocs(query(conversationDraftsCol(teamId), orderBy('updatedAt', 'desc'), limitDocs(25))),
+  ]);
+
+  const drafts = draftSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const draftCount = drafts.filter((item) => item.state === 'draft').length;
+
+  await setDoc(memoryDoc(teamId, 'summary'), {
+    approved: {
+      companyBrief: companyBrief.exists() ? {
+        title: companyBrief.data().title || 'Company brief',
+        approvedAt: companyBrief.data().approvedAt || null,
+      } : null,
+      projectBrief: projectBrief.exists() ? {
+        title: projectBrief.data().title || 'Project brief',
+        approvedAt: projectBrief.data().approvedAt || null,
+      } : null,
+      decisionCount: Array.isArray(decisionLog.data()?.entries) ? decisionLog.data().entries.length : 0,
+    },
+    drafts: drafts.map((item) => ({
+      id: item.id,
+      title: item.title || '(untitled draft)',
+      state: item.state || 'draft',
+      promotedTo: item.promotedTo || null,
+      updatedAt: item.updatedAt || null,
+      createdBy: item.createdBy || 'unknown',
+    })),
+    status: {
+      draftCount,
+      memoryRevision: Number(state.revision || 0),
+      compiledState: state.compiledState || compiled?.state || 'missing',
+      compiledAt: compiled?.compiledAt || null,
+      staleAfter: compiled?.staleAfter || null,
+      latestMemoryUpdatedAt: state.latestMemoryUpdatedAt || null,
+    },
+    updatedAt: serverTimestamp(),
   });
 }
 
@@ -178,8 +383,8 @@ export async function updatePlanNote(teamId, planId, note, userName) {
 
 const VALID_TRANSITIONS = {
   'in-progress': ['review', 'abandoned'],
-  'review': ['merged', 'abandoned'],
-  'merged': ['abandoned'],
+  review: ['merged', 'abandoned'],
+  merged: ['abandoned'],
 };
 
 export async function updatePlanStatus(teamId, planId, status, extraFields = {}) {

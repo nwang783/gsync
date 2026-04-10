@@ -5,8 +5,8 @@ import path from 'path';
 
 import { fileURLToPath } from 'url';
 import { loadConfig, saveConfig, loadSession, saveSession, clearSession, ensureDirs, PLANS_DIR, CONFIG_FILE, CONTEXT_FILE, INDEX_FILE, SKILL_FILE, getDefaultConfig, hasConfigFile } from './config.js';
-import { initFirebase, cleanup, getTeamMeta, setTeamMeta, getPlanContent, getPlanSummary, getRecentPlans, updatePlanNote, updatePlanStatus, getActivePlans, upsertPlanContent } from './firestore.js';
-import { generateContext } from './context.js';
+import { initFirebase, cleanup, getTeamMeta, setTeamMeta, getPlanContent, getPlanSummary, getRecentPlans, updatePlanNote, updatePlanStatus, getActivePlans, upsertPlanContent, createConversationDraft, promoteConversationDraft, getApprovedMemory, saveCompiledContextPack, getCompiledContextPack, getMemoryState } from './firestore.js';
+import { generateContext, buildCompiledContextPack, assertReviewerContextReady } from './context.js';
 import { formatPlanSummary, formatPlanSummaryDetail, formatRelativeTime, parseDuration } from './format.js';
 import { buildPulledPlanFile, normalizeTouches, parsePlanFile } from './plan-file.js';
 
@@ -229,14 +229,24 @@ program
       const recentCount = Number.parseInt(opts.last ?? '20', 10);
 
       verbose('Fetching data from Firestore...');
-      const [twoWeek, threeDay, activePlans, recentPlans] = await Promise.all([
+      const [twoWeek, threeDay, activePlans, recentPlans, approvedMemory] = await Promise.all([
         getTeamMeta(session.teamId, '2week'),
         getTeamMeta(session.teamId, '3day'),
         getActivePlans(session.teamId),
         getRecentPlans(session.teamId, Number.isNaN(recentCount) ? 20 : recentCount),
+        getApprovedMemory(session.teamId),
       ]);
 
       const contextContent = generateContext(twoWeek, threeDay, activePlans, recentPlans);
+      const compiledPack = buildCompiledContextPack({
+        twoWeek,
+        threeDay,
+        activePlans,
+        recentPlans,
+        memory: approvedMemory,
+      });
+      await saveCompiledContextPack(session.teamId, compiledPack, session.seatName);
+
       fs.writeFileSync(CONTEXT_FILE, contextContent, 'utf-8');
       fs.writeFileSync(
         INDEX_FILE,
@@ -245,12 +255,22 @@ program
           teamId: session.teamId,
           activePlans,
           recentPlans,
+          memory: {
+            revision: approvedMemory.revision || 0,
+            compiledState: compiledPack.state,
+            compiledAt: compiledPack.compiledAt,
+            staleAfter: compiledPack.staleAfter,
+          },
         }, null, 2) + '\n',
         'utf-8',
       );
 
       console.log(chalk.green(`✓ Synced ${activePlans.length} active plan(s)`));
       console.log(chalk.cyan(`  CONTEXT.md updated at ~/.gsync/CONTEXT.md`));
+      console.log(chalk.cyan(`  Compiled memory context: ${compiledPack.state}`));
+      if (compiledPack.reason) {
+        console.log(chalk.yellow(`  ${compiledPack.reason}`));
+      }
       for (const plan of activePlans) {
         console.log(chalk.cyan(`  ${formatPlanSummary(plan)}`));
       }
@@ -460,6 +480,78 @@ goalsCmd
       console.log(chalk.green('✓ 3-day target updated'));
     } catch (err) {
       console.error(chalk.red(`Set 3-day target failed: ${friendlyError(err)}`));
+      if (program.opts().verbose) console.error(err);
+      process.exit(1);
+    }
+  });
+
+// --- gsync memory ---
+const memoryCmd = program
+  .command('memory')
+  .description('Manage approval-gated company memory');
+
+memoryCmd
+  .command('draft')
+  .description('Create a planning conversation draft (evidence only)')
+  .requiredOption('--title <text>', 'draft title')
+  .requiredOption('--body <text>', 'draft body text')
+  .option('--tags <csv>', 'comma-separated draft tags', '')
+  .action(async (opts) => {
+    try {
+      const { session } = await requireConfig();
+      const tags = String(opts.tags || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const draftId = await createConversationDraft(session.teamId, {
+        title: opts.title,
+        body: opts.body,
+        tags,
+      }, session.seatName);
+      console.log(chalk.green(`✓ Conversation draft created: ${draftId}`));
+      console.log(chalk.cyan('  State: draft (not approved memory yet)'));
+    } catch (err) {
+      console.error(chalk.red(`Memory draft failed: ${friendlyError(err)}`));
+      if (program.opts().verbose) console.error(err);
+      process.exit(1);
+    }
+  });
+
+memoryCmd
+  .command('approve <draftId>')
+  .description('Promote a draft into approved memory')
+  .requiredOption('--to <target>', 'promotion target: companyBrief | projectBrief | decisionLog')
+  .option('--title <text>', 'optional approved title override')
+  .action(async (draftId, opts) => {
+    try {
+      const { session } = await requireConfig();
+      await promoteConversationDraft(session.teamId, draftId, {
+        target: opts.to,
+        titleOverride: opts.title || null,
+      }, session.seatName);
+      console.log(chalk.green(`✓ Draft ${draftId} approved into ${opts.to}`));
+      console.log(chalk.cyan('  Compiled context marked stale until next `gsync sync`.'));
+    } catch (err) {
+      console.error(chalk.red(`Memory approval failed: ${friendlyError(err)}`));
+      if (program.opts().verbose) console.error(err);
+      process.exit(1);
+    }
+  });
+
+memoryCmd
+  .command('reviewer-context')
+  .description('Print compiled reviewer context (fails closed when missing/stale)')
+  .action(async () => {
+    try {
+      const { session } = await requireConfig();
+      const [compiledPack, state] = await Promise.all([
+        getCompiledContextPack(session.teamId),
+        getMemoryState(session.teamId),
+      ]);
+      const ready = assertReviewerContextReady(compiledPack, state?.latestMemoryUpdatedAt);
+      console.log(ready.markdown);
+    } catch (err) {
+      console.error(chalk.red(`Reviewer context failed: ${friendlyError(err)}`));
       if (program.opts().verbose) console.error(err);
       process.exit(1);
     }
