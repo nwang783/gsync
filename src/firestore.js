@@ -181,7 +181,7 @@ export async function promoteConversationDraft(teamId, draftId, { target, titleO
       revision: nextRevision,
       latestMemoryUpdatedAt: serverTimestamp(),
       latestMemoryUpdatedBy: userName,
-      compiledState: 'stale',
+      compiledState: 'needs-sync',
       compiledAt: state.compiledAt || null,
     }, { merge: true });
   });
@@ -241,6 +241,13 @@ async function updateMemorySummary(teamId) {
 
   const drafts = draftSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const draftCount = drafts.filter((item) => item.state === 'draft').length;
+  const compiledAt = compiled?.compiledAt || null;
+  const latestMemoryUpdatedAt = state.latestMemoryUpdatedAt || null;
+  const syncRequired = Boolean(
+    compiledAt
+    && latestMemoryUpdatedAt
+    && toMillis(latestMemoryUpdatedAt) > toMillis(compiledAt)
+  ) || state.compiledState === 'needs-sync';
 
   await setDoc(memoryDoc(teamId, 'summary'), {
     approved: {
@@ -266,9 +273,9 @@ async function updateMemorySummary(teamId) {
       draftCount,
       memoryRevision: Number(state.revision || 0),
       compiledState: state.compiledState || compiled?.state || 'missing',
-      compiledAt: compiled?.compiledAt || null,
-      staleAfter: compiled?.staleAfter || null,
-      latestMemoryUpdatedAt: state.latestMemoryUpdatedAt || null,
+      compiledAt,
+      latestMemoryUpdatedAt,
+      syncRequired,
     },
     updatedAt: serverTimestamp(),
   });

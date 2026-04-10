@@ -63,24 +63,22 @@ test('buildCompiledContextPack marks missing when approved memory is incomplete'
   assert.match(pack.reason, /required/i);
 });
 
-test('assertReviewerContextReady fails closed for stale packs', () => {
+test('assertReviewerContextReady fails closed when approved memory changed after sync', () => {
   assert.throws(() => {
     assertReviewerContextReady({
       state: 'fresh',
-      staleAfter: '2026-04-10T00:00:00.000Z',
       compiledAt: '2026-04-09T00:00:00.000Z',
       markdown: 'x',
-    }, null, new Date('2026-04-11T00:00:00.000Z'));
-  }, /stale/);
+    }, '2026-04-10T00:00:00.000Z', new Date('2026-04-11T00:00:00.000Z'));
+  }, /changed after the last sync/i);
 });
 
 test('assertReviewerContextReady fails closed when approved memory changed post compile', () => {
   assert.throws(() => {
     assertReviewerContextReady({
       state: 'fresh',
-      staleAfter: '2026-04-12T00:00:00.000Z',
       compiledAt: '2026-04-10T00:00:00.000Z',
       markdown: 'x',
     }, '2026-04-10T12:00:00.000Z', new Date('2026-04-10T13:00:00.000Z'));
-  }, /changed after the last compile/);
+  }, /changed after the last sync/i);
 });

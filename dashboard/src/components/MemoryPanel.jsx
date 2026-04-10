@@ -7,12 +7,6 @@ export default function MemoryPanel({ teamId }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => setTick((value) => value + 1), 60000);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -31,11 +25,10 @@ export default function MemoryPanel({ teamId }) {
   }, [teamId]);
 
   const compiledAt = toDate(summary?.status?.compiledAt);
-  const staleAfter = toDate(summary?.status?.staleAfter);
-  const isExpired = staleAfter ? Date.now() >= staleAfter.getTime() : false;
+  const latestMemoryUpdatedAt = toDate(summary?.status?.latestMemoryUpdatedAt);
   const compiledState = summary?.status?.compiledState || 'missing';
-  const displayState = isExpired ? 'stale (expired)' : compiledState;
-  const stateTone = displayState === 'fresh' ? 'fresh' : 'stale';
+  const syncRequired = Boolean(summary?.status?.syncRequired);
+  const displayState = syncRequired ? 'sync required' : compiledState;
 
   return (
     <section className="update-feed" aria-label="memory panel">
@@ -61,10 +54,10 @@ export default function MemoryPanel({ teamId }) {
             <strong>compiled context pack</strong>
             <span>
               state: {displayState}
-              {compiledAt && ` · compiled ${relativeTime(compiledAt)}`}
-              {staleAfter && ` · stale after ${staleAfter.toLocaleString()}`}
+              {compiledAt && ` · last synced ${relativeTime(compiledAt)}`}
+              {latestMemoryUpdatedAt && ` · approved memory updated ${relativeTime(latestMemoryUpdatedAt)}`}
             </span>
-            {stateTone === 'stale' && <div className="stale-badge" style={{ marginTop: '6px', display: 'inline-block' }}>! stale</div>}
+            {syncRequired && <div style={{ marginTop: '6px', display: 'inline-block', padding: '4px 8px', borderRadius: '999px', border: '1px solid #d45b2b', color: '#d45b2b', fontSize: '12px', fontWeight: 600 }}>sync required</div>}
           </div>
           {Array.isArray(summary.drafts) && summary.drafts.length > 0 && (
             <div className="feed-item" style={{ display: 'block' }}>

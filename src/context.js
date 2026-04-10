@@ -1,7 +1,5 @@
 import { formatRelativeTime } from './format.js';
 
-const DEFAULT_MEMORY_MAX_AGE_HOURS = 72;
-
 export function generateContext(twoWeek, threeDay, activePlans, recentPlans) {
   const now = new Date().toISOString();
   const lines = [];
@@ -93,7 +91,6 @@ export function buildCompiledContextPack({ twoWeek, threeDay, activePlans, recen
   const memoryStatus = getMemoryCompleteness(memory);
   const compiledAt = now.toISOString();
   const memoryRevision = Number(memory?.revision || 0);
-  const staleAfter = new Date(now.getTime() + (DEFAULT_MEMORY_MAX_AGE_HOURS * 60 * 60 * 1000)).toISOString();
   const baseContext = generateContext(twoWeek, threeDay, activePlans, recentPlans);
 
   if (memoryStatus !== 'ready') {
@@ -101,7 +98,6 @@ export function buildCompiledContextPack({ twoWeek, threeDay, activePlans, recen
       state: 'missing',
       reason: 'Approved company brief and project brief are required before compiling reviewer context.',
       compiledAt,
-      staleAfter,
       memoryRevision,
       markdown: '',
     };
@@ -140,7 +136,6 @@ export function buildCompiledContextPack({ twoWeek, threeDay, activePlans, recen
     state: 'fresh',
     reason: null,
     compiledAt,
-    staleAfter,
     memoryRevision,
     markdown: lines.join('\n'),
   };
@@ -164,15 +159,10 @@ export function assertReviewerContextReady(compiledPack, latestMemoryUpdatedAt, 
     throw new Error(`Reviewer context unavailable: compiled context pack is ${compiledPack.state}. ${compiledPack.reason || 'Approve memory and recompile.'}`);
   }
 
-  const staleAfterMs = toMillis(compiledPack.staleAfter);
-  if (staleAfterMs && staleAfterMs <= now.getTime()) {
-    throw new Error('Reviewer context unavailable: compiled context pack is stale (expired). Run `gsync sync` to refresh approved memory.');
-  }
-
   const compiledAtMs = toMillis(compiledPack.compiledAt);
   const latestMemoryMs = toMillis(latestMemoryUpdatedAt);
   if (latestMemoryMs && compiledAtMs && latestMemoryMs > compiledAtMs) {
-    throw new Error('Reviewer context unavailable: approved memory changed after the last compile. Run `gsync sync` to recompile.');
+    throw new Error('Reviewer context unavailable: approved memory changed after the last sync. Run `gsync sync` to refresh approved memory.');
   }
 
   return compiledPack;

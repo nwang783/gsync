@@ -258,7 +258,7 @@ program
             revision: approvedMemory.revision || 0,
             compiledState: compiledPack.state,
             compiledAt: compiledPack.compiledAt,
-            staleAfter: compiledPack.staleAfter,
+            latestMemoryUpdatedAt: approvedMemory.latestMemoryUpdatedAt || null,
           },
         }, null, 2) + '\n',
         'utf-8',
@@ -529,7 +529,7 @@ memoryCmd
         titleOverride: opts.title || null,
       }, session.seatName);
       console.log(chalk.green(`✓ Draft ${draftId} approved into ${opts.to}`));
-      console.log(chalk.cyan('  Compiled context marked stale until next `gsync sync`.'));
+      console.log(chalk.cyan('  Run `gsync sync` to refresh the compiled context with the latest approved memory.'));
     } catch (err) {
       console.error(chalk.red(`Memory approval failed: ${friendlyError(err)}`));
       if (program.opts().verbose) console.error(err);
@@ -539,7 +539,7 @@ memoryCmd
 
 memoryCmd
   .command('reviewer-context')
-  .description('Print compiled reviewer context (fails closed when missing/stale)')
+  .description('Print compiled reviewer context (fails closed when missing or out of date)')
   .action(async () => {
     try {
       const { session } = await requireConfig();

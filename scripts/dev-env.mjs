@@ -92,7 +92,31 @@ async function waitForServices() {
     waitForPort(9099),
     waitForPort(5001),
     waitForPort(5173),
+    waitForFunctionsReady(),
   ]);
+}
+
+async function waitForFunctionsReady(timeoutMs = 120000) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/agent/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seatKey: '' }),
+      });
+      if (response.status !== 404) {
+        return;
+      }
+    } catch {
+      // keep polling until the function manifest is available
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw new Error('Timed out waiting for the local Functions emulator to load api.');
 }
 
 function loadState() {
@@ -284,7 +308,7 @@ async function seedDevData() {
   runCli(['login', '--key', team.seatKey], { inheritStdio: true });
 
   runCli(['goals', 'set-2week', '--goal', 'Ship the company memory layer and keep reviewer context fail-closed'], { inheritStdio: true });
-  runCli(['goals', 'set-3day', '--goal', 'Verify local dev stack, memory approval flow, and stale context handling'], { inheritStdio: true });
+  runCli(['goals', 'set-3day', '--goal', 'Verify local dev stack, memory approval flow, and sync refresh handling'], { inheritStdio: true });
 
   const companyDraft = runCli(['memory', 'draft', '--title', 'Company brief', '--body', 'We sell confidence for small teams.']);
   const companyDraftId = extractDraftId(companyDraft.stdout);
@@ -298,7 +322,7 @@ async function seedDevData() {
   const decisionDraftId = extractDraftId(decisionDraft.stdout);
   runCli(['memory', 'approve', decisionDraftId, '--to', 'decisionLog'], { inheritStdio: true });
 
-  runCli(['memory', 'draft', '--title', 'Open question', '--body', 'What should the stale-context threshold be for long-running projects?']);
+  runCli(['memory', 'draft', '--title', 'Open question', '--body', 'Should the agent sync before every reviewer-context read?']);
 
   fs.writeFileSync(DEV_PLAN_FILE, `---\nslug: dev-memory-loop\nsummary: Seed local memory dev loop\nalignment: Validates the approval-gated memory flow and dashboard visibility\noutOfScope: Production data, remote deploys, or long-term storage design\nstatus: in-progress\nauthor: agent-admin\ntouches: src/context.js, src/firestore.js, dashboard/src/components/MemoryPanel.jsx\n---\n\n# Seeded local dev plan\n\nThis plan exists only so the local dashboard has a realistic active plan to render.\n`, 'utf8');
   const planPush = runCli(['plan', 'push', DEV_PLAN_FILE]);
