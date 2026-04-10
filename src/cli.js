@@ -547,7 +547,7 @@ memoryCmd
         getCompiledContextPack(session.teamId),
         getMemoryState(session.teamId),
       ]);
-      const ready = assertReviewerContextReady(compiledPack, state?.latestMemoryUpdatedAt);
+      const ready = assertReviewerContextReady(compiledPack, state);
       console.log(ready.markdown);
     } catch (err) {
       console.error(chalk.red(`Reviewer context failed: ${friendlyError(err)}`));

@@ -150,7 +150,7 @@ export function buildSyncContextContent({ twoWeek, threeDay, activePlans, recent
   return { contextContent, compiledPack };
 }
 
-export function assertReviewerContextReady(compiledPack, latestMemoryUpdatedAt, now = new Date()) {
+export function assertReviewerContextReady(compiledPack, memoryState) {
   if (!compiledPack) {
     throw new Error('Reviewer context unavailable: compiled context pack is missing. Run `gsync sync` after approving memory drafts.');
   }
@@ -159,9 +159,13 @@ export function assertReviewerContextReady(compiledPack, latestMemoryUpdatedAt, 
     throw new Error(`Reviewer context unavailable: compiled context pack is ${compiledPack.state}. ${compiledPack.reason || 'Approve memory and recompile.'}`);
   }
 
-  const compiledAtMs = toMillis(compiledPack.compiledAt);
-  const latestMemoryMs = toMillis(latestMemoryUpdatedAt);
-  if (latestMemoryMs && compiledAtMs && latestMemoryMs > compiledAtMs) {
+  const compiledRevision = Number(compiledPack.memoryRevision);
+  if (!Number.isFinite(compiledRevision)) {
+    throw new Error('Reviewer context unavailable: compiled context pack is outdated. Run `gsync sync` to refresh approved memory.');
+  }
+
+  const currentRevision = Number(memoryState?.revision || 0);
+  if (compiledRevision !== currentRevision) {
     throw new Error('Reviewer context unavailable: approved memory changed after the last sync. Run `gsync sync` to refresh approved memory.');
   }
 

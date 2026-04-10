@@ -12,6 +12,7 @@ Today the project includes:
 
 - a CLI for setting shared goals and tracking active plans
 - a shared plan model with summary metadata plus canonical markdown bodies
+- an approval-gated company memory layer with a compiled reviewer context pack
 - a local sync step that generates agent-readable summary context files
 - a dashboard for team visibility
 
@@ -66,7 +67,8 @@ The intended model is:
 The current prototype uses Firebase and a local sync cache:
 
 - Firebase stores shared team goals and plan records
-- the CLI syncs summary context first, then pulls full plans on demand
+- Firebase also stores approval-gated company memory and compiled reviewer context state
+- the CLI syncs summary context first, then compiles approved memory and pulls full plans on demand
 - the dashboard provides live visibility into goals, active plans, and recent updates
 
 ## Happy Path
@@ -125,9 +127,32 @@ gsync join --code XXXX-XXXX-XXXX --seat-name teammate-mbp
 gsync login --key <seat-key>
 gsync sync --last 20
 cat ~/.gsync/CONTEXT.md
+gsync memory reviewer-context   # approved-memory bundle; fails closed if sync is stale
 gsync plan pull <id>              # only if a summary looks relevant
 gsync plan push my-plan.md        # create or update canonical plan
 gsync plan update <id> --note "milestone or blocker"
 gsync plan review <id> --pr https://github.com/org/repo/pull/123
 gsync plan merged <id>
 ```
+
+## Approval-Gated Memory
+
+Durable company memory now flows through an explicit draft-and-approval loop before reviewer agents consume it:
+
+```bash
+gsync memory draft --title "Company brief" --body "We help small teams stay aligned"
+gsync memory approve <draft-id> --to companyBrief
+gsync memory draft --title "Project brief" --body "This quarter focuses on onboarding and reliability"
+gsync memory approve <draft-id> --to projectBrief
+gsync memory draft --title "Decision" --body "Approve durable memory before reviewers rely on it"
+gsync memory approve <draft-id> --to decisionLog
+gsync sync
+gsync memory reviewer-context
+```
+
+Key behavior:
+
+- `memory draft` is planning evidence, not durable memory.
+- `memory approve` promotes a draft into `companyBrief`, `projectBrief`, or `decisionLog`.
+- `gsync sync` recompiles the approved-memory bundle.
+- If approved memory changes after your last sync, `gsync memory reviewer-context` fails closed until you sync again.

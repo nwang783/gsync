@@ -159,12 +159,18 @@ async function startDevStack() {
 
   if (loadState()?.emulatorsPid && loadState()?.dashboardPid) {
     const state = loadState();
-    if (isProcessAlive(state.emulatorsPid) || isProcessAlive(state.dashboardPid)) {
+    const emulatorsRunning = isProcessAlive(state.emulatorsPid);
+    const dashboardRunning = isProcessAlive(state.dashboardPid);
+    if (emulatorsRunning && dashboardRunning) {
       console.log(`Dev stack already running.`);
       console.log(`  Dashboard: ${DASHBOARD_URL}`);
       console.log(`  Firebase emulators: http://127.0.0.1:4000`);
       return;
     }
+
+    killProcessTree(state.emulatorsPid);
+    killProcessTree(state.dashboardPid);
+    clearState();
   }
 
   const dashboardEnv = {
@@ -372,6 +378,27 @@ async function smokeTest() {
   const dashboardResp = await fetch(DASHBOARD_URL);
   if (!dashboardResp.ok) {
     throw new Error(`Dashboard smoke check failed: ${dashboardResp.status}`);
+  }
+
+  const staleDraft = runCli(['memory', 'draft', '--title', 'Updated company brief', '--body', 'We help teams stay aligned when approved memory changes.']);
+  const staleDraftId = extractDraftId(staleDraft.stdout);
+  runCli(['memory', 'approve', staleDraftId, '--to', 'companyBrief'], { inheritStdio: true });
+
+  let failedClosed = false;
+  try {
+    runCli(['memory', 'reviewer-context']);
+  } catch (error) {
+    failedClosed = /Run `gsync sync`/i.test(error.message);
+  }
+
+  if (!failedClosed) {
+    throw new Error('Reviewer context should fail closed after approved memory changes until sync reruns.');
+  }
+
+  runCli(['sync'], { inheritStdio: true });
+  const refreshedContext = runCli(['memory', 'reviewer-context']);
+  if (!/stay aligned when approved memory changes/i.test(refreshedContext.stdout)) {
+    throw new Error('Reviewer context did not refresh after syncing updated approved memory.');
   }
 
   console.log('Smoke test passed.');

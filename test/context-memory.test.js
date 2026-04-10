@@ -63,22 +63,34 @@ test('buildCompiledContextPack marks missing when approved memory is incomplete'
   assert.match(pack.reason, /required/i);
 });
 
-test('assertReviewerContextReady fails closed when approved memory changed after sync', () => {
+test('assertReviewerContextReady returns the compiled pack when memory revisions match', () => {
+  const compiledPack = {
+    state: 'fresh',
+    compiledAt: '2026-04-10T00:00:00.000Z',
+    memoryRevision: 4,
+    markdown: 'x',
+  };
+
+  assert.equal(assertReviewerContextReady(compiledPack, { revision: 4 }), compiledPack);
+});
+
+test('assertReviewerContextReady fails closed when approved memory revision changes after sync', () => {
   assert.throws(() => {
     assertReviewerContextReady({
       state: 'fresh',
-      compiledAt: '2026-04-09T00:00:00.000Z',
+      compiledAt: '2026-04-10T12:00:00.000Z',
+      memoryRevision: 2,
       markdown: 'x',
-    }, '2026-04-10T00:00:00.000Z', new Date('2026-04-11T00:00:00.000Z'));
+    }, { revision: 3, latestMemoryUpdatedAt: '2026-04-10T00:00:00.000Z' });
   }, /changed after the last sync/i);
 });
 
-test('assertReviewerContextReady fails closed when approved memory changed post compile', () => {
+test('assertReviewerContextReady fails closed when the compiled pack predates memory revisions', () => {
   assert.throws(() => {
     assertReviewerContextReady({
       state: 'fresh',
-      compiledAt: '2026-04-10T00:00:00.000Z',
+      compiledAt: '2026-04-11T00:00:00.000Z',
       markdown: 'x',
-    }, '2026-04-10T12:00:00.000Z', new Date('2026-04-10T13:00:00.000Z'));
-  }, /changed after the last sync/i);
+    }, { revision: 1 });
+  }, /outdated/i);
 });

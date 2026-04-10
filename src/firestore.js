@@ -194,13 +194,19 @@ export async function saveCompiledContextPack(teamId, pack, userName) {
   await runTransaction(getDb(), async (transaction) => {
     const stateSnap = await transaction.get(stateRef);
     const state = stateSnap.exists() ? stateSnap.data() : { revision: 0 };
+    const currentRevision = Number(state.revision || 0);
+    const compiledRevision = Number(pack.memoryRevision || 0);
+    if (currentRevision !== compiledRevision) {
+      throw new Error('Approved memory changed during sync. Run `gsync sync` again to refresh reviewer context.');
+    }
+
     transaction.set(memoryDoc(teamId, 'compiledContext'), {
       ...pack,
       updatedAt: serverTimestamp(),
       updatedBy: userName,
     });
     transaction.set(stateRef, {
-      revision: Number(state.revision || 0),
+      revision: currentRevision,
       latestMemoryUpdatedAt: state.latestMemoryUpdatedAt || null,
       latestMemoryUpdatedBy: state.latestMemoryUpdatedBy || null,
       compiledState: pack.state,
@@ -241,13 +247,12 @@ async function updateMemorySummary(teamId) {
 
   const drafts = draftSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const draftCount = drafts.filter((item) => item.state === 'draft').length;
-  const compiledAt = compiled?.compiledAt || null;
+  const stateRevision = Number(state.revision || 0);
+  const compiledRevision = compiled?.memoryRevision == null ? null : Number(compiled.memoryRevision || 0);
+  const compiledAt = state.compiledAt || compiled?.compiledAt || null;
   const latestMemoryUpdatedAt = state.latestMemoryUpdatedAt || null;
-  const syncRequired = Boolean(
-    compiledAt
-    && latestMemoryUpdatedAt
-    && toMillis(latestMemoryUpdatedAt) > toMillis(compiledAt)
-  ) || state.compiledState === 'needs-sync';
+  const syncRequired = state.compiledState === 'needs-sync'
+    || (compiledRevision == null ? stateRevision > 0 : compiledRevision !== stateRevision);
 
   await setDoc(memoryDoc(teamId, 'summary'), {
     approved: {
@@ -271,7 +276,7 @@ async function updateMemorySummary(teamId) {
     })),
     status: {
       draftCount,
-      memoryRevision: Number(state.revision || 0),
+      memoryRevision: stateRevision,
       compiledState: state.compiledState || compiled?.state || 'missing',
       compiledAt,
       latestMemoryUpdatedAt,
