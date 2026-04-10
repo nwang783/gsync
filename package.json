@@ -2,6 +2,13 @@
   "name": "gsync-cli",
   "version": "1.0.3",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nwang783/nomergeconflicts.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "gsync": "bin/gsync.js"
   },
@@ -15,6 +22,13 @@
     "test:dashboard": "npm --prefix dashboard test",
     "build:dashboard": "npm --prefix dashboard run build",
     "dev:dashboard": "npm --prefix dashboard run dev",
+    "dev:up": "node scripts/dev-env.mjs up",
+    "dev:down": "node scripts/dev-env.mjs down",
+    "dev:reset": "node scripts/dev-env.mjs reset",
+    "dev:seed": "node scripts/dev-env.mjs seed",
+    "dev:smoke": "node scripts/dev-env.mjs smoke",
+    "dev:status": "node scripts/dev-env.mjs status",
+    "dev:cli": "node scripts/dev-env.mjs cli",
     "deploy:hosting": "npm run build:dashboard && firebase deploy --only hosting",
     "deploy:firebase": "npm run build:dashboard && firebase deploy",
     "emulators": "firebase emulators:start --only auth,firestore,functions,hosting"

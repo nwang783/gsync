@@ -87,6 +87,97 @@ export function generateContext(twoWeek, threeDay, activePlans, recentPlans) {
   return lines.join('\n');
 }
 
+export function buildCompiledContextPack({ twoWeek, threeDay, activePlans, recentPlans, memory, now = new Date() }) {
+  const memoryStatus = getMemoryCompleteness(memory);
+  const compiledAt = now.toISOString();
+  const memoryRevision = Number(memory?.revision || 0);
+  const baseContext = generateContext(twoWeek, threeDay, activePlans, recentPlans);
+
+  if (memoryStatus !== 'ready') {
+    return {
+      state: 'missing',
+      reason: 'Approved company brief and project brief are required before compiling reviewer context.',
+      compiledAt,
+      memoryRevision,
+      markdown: '',
+    };
+  }
+
+  const lines = [
+    '# gsync Compiled Context Pack',
+    `Compiled at: ${compiledAt}`,
+    `Memory revision: ${memoryRevision}`,
+    '',
+    '## Approved Company Brief',
+    memory.companyBrief.content,
+    '',
+    '## Approved Project Brief',
+    memory.projectBrief.content,
+    '',
+    '## Approved Decision Log',
+  ];
+
+  const decisions = Array.isArray(memory.decisionLog?.entries) ? memory.decisionLog.entries : [];
+  if (decisions.length === 0) {
+    lines.push('(no approved decisions yet)');
+  } else {
+    for (const entry of decisions) {
+      const decidedAt = entry.decidedAt || '(date not set)';
+      lines.push(`- [${decidedAt}] ${entry.summary}`);
+    }
+  }
+
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+  lines.push(baseContext);
+
+  return {
+    state: 'fresh',
+    reason: null,
+    compiledAt,
+    memoryRevision,
+    markdown: lines.join('\n'),
+  };
+}
+
+export function buildSyncContextContent({ twoWeek, threeDay, activePlans, recentPlans, memory, now = new Date() }) {
+  const compiledPack = buildCompiledContextPack({ twoWeek, threeDay, activePlans, recentPlans, memory, now });
+  const contextContent = compiledPack.state === 'fresh'
+    ? compiledPack.markdown
+    : generateContext(twoWeek, threeDay, activePlans, recentPlans);
+
+  return { contextContent, compiledPack };
+}
+
+export function assertReviewerContextReady(compiledPack, memoryState) {
+  if (!compiledPack) {
+    throw new Error('Reviewer context unavailable: compiled context pack is missing. Run `gsync sync` after approving memory drafts.');
+  }
+
+  if (compiledPack.state !== 'fresh') {
+    throw new Error(`Reviewer context unavailable: compiled context pack is ${compiledPack.state}. ${compiledPack.reason || 'Approve memory and recompile.'}`);
+  }
+
+  const compiledRevision = Number(compiledPack.memoryRevision);
+  if (!Number.isFinite(compiledRevision)) {
+    throw new Error('Reviewer context unavailable: compiled context pack is outdated. Run `gsync sync` to refresh approved memory.');
+  }
+
+  const currentRevision = Number(memoryState?.revision || 0);
+  if (compiledRevision !== currentRevision) {
+    throw new Error('Reviewer context unavailable: approved memory changed after the last sync. Run `gsync sync` to refresh approved memory.');
+  }
+
+  return compiledPack;
+}
+
+function getMemoryCompleteness(memory) {
+  if (!memory?.companyBrief?.content) return 'missing';
+  if (!memory?.projectBrief?.content) return 'missing';
+  return 'ready';
+}
+
 function toMillis(timestamp) {
   if (!timestamp) return null;
   if (timestamp.toMillis) return timestamp.toMillis();

@@ -1,0 +1,143 @@
+name: CI CD
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            dashboard/package-lock.json
+            functions/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install dashboard dependencies
+        run: npm --prefix dashboard ci
+
+      - name: Install functions dependencies
+        run: npm --prefix functions ci
+
+      - name: Run CLI tests
+        run: npm test
+
+      - name: Run dashboard tests
+        run: npm run test:dashboard
+
+      - name: Build dashboard
+        run: npm run build:dashboard
+
+  deploy-firebase:
+    name: Deploy Firebase
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            dashboard/package-lock.json
+            functions/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install dashboard dependencies
+        run: npm --prefix dashboard ci
+
+      - name: Install functions dependencies
+        run: npm --prefix functions ci
+
+      - name: Build dashboard
+        run: npm run build:dashboard
+
+      - name: Write Firebase service account
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "Missing FIREBASE_SERVICE_ACCOUNT_JSON secret"
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+
+      - name: Deploy to Firebase
+        run: npx --yes firebase-tools@13 deploy --project nomergeconflicts --non-interactive
+
+  publish-npm:
+    name: Publish npm package
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            dashboard/package-lock.json
+            functions/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Publish if this version is new
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "Missing NPM_TOKEN secret"
+            exit 1
+          fi
+
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          PUBLISHED_VERSION=$(npm view gsync-cli version --json 2>/dev/null || true)
+          PUBLISHED_VERSION=$(printf '%s' "$PUBLISHED_VERSION" | tr -d '"')
+
+          if [ -n "$PUBLISHED_VERSION" ] && [ "$CURRENT_VERSION" = "$PUBLISHED_VERSION" ]; then
+            echo "gsync-cli@$CURRENT_VERSION is already published; skipping."
+            exit 0
+          fi
+
+          npm publish --provenance --access public

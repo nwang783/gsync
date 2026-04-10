@@ -144,6 +144,7 @@ At the start of every coding session, before reading any code or writing any pla
 gsync status        # fast local check: what's cached from last sync
 gsync sync --last 20 # pull fresh goals + summary index from Firestore
 cat ~/.gsync/CONTEXT.md
+gsync memory reviewer-context # approved memory bundle; fails closed until sync is current
 ```
 
 Read `CONTEXT.md` carefully. It contains:
@@ -160,6 +161,8 @@ Use this to:
 
 Important: `gsync sync` no longer mirrors every full plan file locally. It gives you a summary index first. Pull full markdown plans only when they are relevant.
 
+Important: approved company memory is now compiled separately from the summary context. `gsync memory reviewer-context` prints the approval-gated company brief, project brief, decision log, and plan context bundle that reviewer agents should use. If approved memory changed after your last sync, this command fails closed and tells you to rerun `gsync sync` first.
+
 If one or more plans look relevant, fetch them explicitly:
 
 ```bash
@@ -167,6 +170,30 @@ gsync plan pull <id>
 ```
 
 That writes the canonical markdown plan into `~/.gsync/plans/` for agent ingestion and local rereads.
+
+---
+
+## Approval-Gated Company Memory
+
+Use the memory flow when the team wants durable company context that must be explicitly approved before it becomes part of reviewer context:
+
+```bash
+gsync memory draft --title "Company brief" --body "We help small teams stay aligned"
+gsync memory approve <draft-id> --to companyBrief
+gsync memory draft --title "Project brief" --body "This quarter focuses on onboarding and reliability"
+gsync memory approve <draft-id> --to projectBrief
+gsync memory draft --title "Decision" --body "Approve durable memory before reviewers rely on it"
+gsync memory approve <draft-id> --to decisionLog
+gsync sync
+gsync memory reviewer-context
+```
+
+Rules of thumb:
+
+- `memory draft` stores planning evidence only. It is not durable memory yet.
+- `memory approve` promotes a draft into `companyBrief`, `projectBrief`, or `decisionLog`.
+- Every approval invalidates the current compiled reviewer context until `gsync sync` runs again.
+- `CONTEXT.md` is still the quick routing summary. `memory reviewer-context` is the fail-closed approved-memory bundle.
 
 ---
 
@@ -358,6 +385,9 @@ gsync plan review <id> --pr <url>  # link plan to PR, move to review status
 gsync plan merged <id>        # close a plan after PR merges
 gsync goals set-2week --goal "..."  # update 2-week goal
 gsync goals set-3day  --goal "..."  # update 3-day target
+gsync memory draft --title "..." --body "..."  # create a planning conversation draft
+gsync memory approve <draft-id> --to companyBrief|projectBrief|decisionLog  # promote approved memory
+gsync memory reviewer-context  # print the compiled, fail-closed approved-memory bundle
 ```
 
 ---

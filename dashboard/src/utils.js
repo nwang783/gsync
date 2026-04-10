@@ -1,7 +1,8 @@
 export function relativeTime(date) {
-  if (!date) return '';
+  const parsed = toDate(date);
+  if (!parsed) return '';
   const now = Date.now();
-  const ts = date instanceof Date ? date.getTime() : date.toDate?.().getTime?.() ?? date;
+  const ts = parsed.getTime();
   const diffMs = now - ts;
   const diffMin = Math.floor(diffMs / 60000);
   const diffHr = Math.floor(diffMs / 3600000);
@@ -18,6 +19,10 @@ export function toDate(timestamp) {
   if (timestamp instanceof Date) return timestamp;
   if (typeof timestamp.toDate === 'function') return timestamp.toDate();
   if (typeof timestamp === 'number') return new Date(timestamp);
+  if (typeof timestamp === 'string') {
+    const parsed = new Date(timestamp);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
   return null;
 }
 
