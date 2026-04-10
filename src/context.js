@@ -146,6 +146,15 @@ export function buildCompiledContextPack({ twoWeek, threeDay, activePlans, recen
   };
 }
 
+export function buildSyncContextContent({ twoWeek, threeDay, activePlans, recentPlans, memory, now = new Date() }) {
+  const compiledPack = buildCompiledContextPack({ twoWeek, threeDay, activePlans, recentPlans, memory, now });
+  const contextContent = compiledPack.state === 'fresh'
+    ? compiledPack.markdown
+    : generateContext(twoWeek, threeDay, activePlans, recentPlans);
+
+  return { contextContent, compiledPack };
+}
+
 export function assertReviewerContextReady(compiledPack, latestMemoryUpdatedAt, now = new Date()) {
   if (!compiledPack) {
     throw new Error('Reviewer context unavailable: compiled context pack is missing. Run `gsync sync` after approving memory drafts.');

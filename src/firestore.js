@@ -236,7 +236,7 @@ async function updateMemorySummary(teamId) {
     getDoc(memoryDoc(teamId, 'decisionLog')),
     getMemoryState(teamId),
     getCompiledContextPack(teamId),
-    getDocs(query(conversationDraftsCol(teamId), orderBy('updatedAt', 'desc'), limitDocs(25))),
+    getDocs(query(conversationDraftsCol(teamId), orderBy('updatedAt', 'desc'))),
   ]);
 
   const drafts = draftSnap.docs.map((d) => ({ id: d.id, ...d.data() }));

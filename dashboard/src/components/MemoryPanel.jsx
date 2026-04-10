@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
-import { relativeTime } from '../utils.js';
+import { relativeTime, toDate } from '../utils.js';
 
 export default function MemoryPanel({ teamId }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick((value) => value + 1), 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -23,6 +29,13 @@ export default function MemoryPanel({ teamId }) {
 
     return unsub;
   }, [teamId]);
+
+  const compiledAt = toDate(summary?.status?.compiledAt);
+  const staleAfter = toDate(summary?.status?.staleAfter);
+  const isExpired = staleAfter ? Date.now() >= staleAfter.getTime() : false;
+  const compiledState = summary?.status?.compiledState || 'missing';
+  const displayState = isExpired ? 'stale (expired)' : compiledState;
+  const stateTone = displayState === 'fresh' ? 'fresh' : 'stale';
 
   return (
     <section className="update-feed" aria-label="memory panel">
@@ -47,9 +60,11 @@ export default function MemoryPanel({ teamId }) {
           <div className="feed-item">
             <strong>compiled context pack</strong>
             <span>
-              state: {summary.status?.compiledState || 'missing'}
-              {summary.status?.compiledAt && ` · compiled ${relativeTime(summary.status.compiledAt)}`}
+              state: {displayState}
+              {compiledAt && ` · compiled ${relativeTime(compiledAt)}`}
+              {staleAfter && ` · stale after ${staleAfter.toLocaleString()}`}
             </span>
+            {stateTone === 'stale' && <div className="stale-badge" style={{ marginTop: '6px', display: 'inline-block' }}>! stale</div>}
           </div>
           {Array.isArray(summary.drafts) && summary.drafts.length > 0 && (
             <div className="feed-item" style={{ display: 'block' }}>

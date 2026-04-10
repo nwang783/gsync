@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadConfig, saveConfig, loadSession, saveSession, clearSession, ensureDirs, PLANS_DIR, CONFIG_FILE, CONTEXT_FILE, INDEX_FILE, SKILL_FILE, getDefaultConfig, hasConfigFile } from './config.js';
 import { initFirebase, cleanup, getTeamMeta, setTeamMeta, getPlanContent, getPlanSummary, getRecentPlans, updatePlanNote, updatePlanStatus, getActivePlans, upsertPlanContent, createConversationDraft, promoteConversationDraft, getApprovedMemory, saveCompiledContextPack, getCompiledContextPack, getMemoryState } from './firestore.js';
-import { generateContext, buildCompiledContextPack, assertReviewerContextReady } from './context.js';
+import { buildSyncContextContent, assertReviewerContextReady } from './context.js';
 import { formatPlanSummary, formatPlanSummaryDetail, formatRelativeTime, parseDuration } from './format.js';
 import { buildPulledPlanFile, normalizeTouches, parsePlanFile } from './plan-file.js';
 
@@ -237,8 +237,7 @@ program
         getApprovedMemory(session.teamId),
       ]);
 
-      const contextContent = generateContext(twoWeek, threeDay, activePlans, recentPlans);
-      const compiledPack = buildCompiledContextPack({
+      const { contextContent, compiledPack } = buildSyncContextContent({
         twoWeek,
         threeDay,
         activePlans,

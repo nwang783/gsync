@@ -51,6 +51,31 @@ describe('MemoryPanel', () => {
     expect(screen.getByText(/state: fresh/i)).toBeInTheDocument();
   });
 
+  it('marks the compiled context pack stale when the expiry time passes', async () => {
+    const staleAfter = new Date(Date.now() - 60_000);
+    render(<MemoryPanel teamId="team1" />);
+
+    snapshotHandlers[0]({
+      exists: () => true,
+      data: () => ({
+        approved: {
+          companyBrief: { title: 'Company North Star' },
+          projectBrief: { title: 'Project Lighthouse' },
+          decisionCount: 2,
+        },
+        drafts: [],
+        status: {
+          compiledState: 'fresh',
+          compiledAt: new Date(Date.now() - 120_000).toISOString(),
+          staleAfter: staleAfter.toISOString(),
+        },
+      }),
+    });
+
+    await waitFor(() => expect(screen.getByText(/state: stale/i)).toBeInTheDocument());
+    expect(screen.getByText(/! stale/i)).toBeInTheDocument();
+  });
+
   it('shows empty state when memory summary is missing', async () => {
     render(<MemoryPanel teamId="team1" />);
     snapshotHandlers[0]({ exists: () => false });

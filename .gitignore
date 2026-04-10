@@ -8,3 +8,4 @@ dashboard/.env
 .gstack/
 *.log
 .firebase/
+.dev/

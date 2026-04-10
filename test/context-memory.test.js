@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildCompiledContextPack, assertReviewerContextReady } from '../src/context.js';
+import { buildCompiledContextPack, buildSyncContextContent, assertReviewerContextReady } from '../src/context.js';
 
 test('buildCompiledContextPack produces fresh pack from approved memory', () => {
   const pack = buildCompiledContextPack({
@@ -22,6 +22,26 @@ test('buildCompiledContextPack produces fresh pack from approved memory', () => 
   assert.match(pack.markdown, /Approved Company Brief/);
   assert.match(pack.markdown, /Keep approval-gated memory/);
   assert.equal(pack.memoryRevision, 3);
+});
+
+test('buildSyncContextContent includes approved memory in the normal sync artifact', () => {
+  const result = buildSyncContextContent({
+    twoWeek: { content: 'Ship beta' },
+    threeDay: { content: 'Close onboarding bugs' },
+    activePlans: [],
+    recentPlans: [],
+    memory: {
+      revision: 3,
+      companyBrief: { content: 'We sell confidence for small teams.' },
+      projectBrief: { content: 'This quarter focuses on onboarding and reliability.' },
+      decisionLog: { entries: [] },
+    },
+    now: new Date('2026-04-10T00:00:00.000Z'),
+  });
+
+  assert.equal(result.compiledPack.state, 'fresh');
+  assert.match(result.contextContent, /Approved Company Brief/);
+  assert.match(result.contextContent, /We sell confidence for small teams\./);
 });
 
 test('buildCompiledContextPack marks missing when approved memory is incomplete', () => {
