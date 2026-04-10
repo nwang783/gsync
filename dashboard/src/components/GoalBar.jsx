@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { relativeTime } from '../utils.js';
+import { findGoalLinkedPlan } from '../lib/planTags.js';
 
-export default function GoalBar({ teamId }) {
+export default function GoalBar({ teamId, onSelectPlan }) {
   const [twoWeek, setTwoWeek] = useState(null);
   const [threeDay, setThreeDay] = useState(null);
+  const [plans, setPlans] = useState([]);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [, setTick] = useState(0);
@@ -32,12 +34,32 @@ export default function GoalBar({ teamId }) {
     };
   }, [teamId]);
 
+  useEffect(() => {
+    const unsubPlans = onSnapshot(
+      collection(db, 'teams', teamId, 'plans'),
+      (snap) => setPlans(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (err) => setError(err.message),
+    );
+
+    return unsubPlans;
+  }, [teamId]);
+
+  function openGoal(type, label, data) {
+    const linkedPlan = findGoalLinkedPlan(plans, type, data?.content);
+    if (linkedPlan?.id && onSelectPlan) {
+      onSelectPlan(linkedPlan.id);
+      return;
+    }
+
+    setSelected({ label, data });
+  }
+
   return (
     <>
       <div className="goal-bar">
         {error && <div className="error-banner" style={{ color: '#fff', background: '#e53e3e', padding: '8px 12px', borderRadius: '8px', marginBottom: '8px' }}>{error}</div>}
-        <GoalCard label="## 2-week goal" variant="primary" data={twoWeek} onClick={() => setSelected({ label: '2-week goal', data: twoWeek })} />
-        <GoalCard label="## 3-day target" variant="secondary" data={threeDay} onClick={() => setSelected({ label: '3-day target', data: threeDay })} />
+        <GoalCard label="2-week goal" variant="primary" data={twoWeek} onClick={() => openGoal('2week', '2-week goal', twoWeek)} />
+        <GoalCard label="3-day target" variant="secondary" data={threeDay} onClick={() => openGoal('3day', '3-day target', threeDay)} />
       </div>
       {selected && (
         <GoalDetail label={selected.label} data={selected.data} onClose={() => setSelected(null)} />
@@ -48,7 +70,7 @@ export default function GoalBar({ teamId }) {
 
 function GoalCard({ label, variant, data, onClick }) {
   return (
-    <div className={`goal-card goal-card--${variant}`} onClick={onClick}>
+    <button type="button" className={`goal-card goal-card--${variant}`} onClick={onClick}>
       <div className="goal-label">{label}</div>
       {data ? (
         <>
@@ -61,7 +83,7 @@ function GoalCard({ label, variant, data, onClick }) {
       ) : (
         <div className="goal-content not-set">not set</div>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -79,6 +101,10 @@ function GoalDetail({ label, data, onClose }) {
             <div className="modal-section">
               <div className="section-label">content</div>
               <div className="section-value">{data.content}</div>
+            </div>
+            <div className="modal-section">
+              <div className="section-label">linked plan</div>
+              <div className="section-value">No matching canonical plan was found for this goal yet.</div>
             </div>
             <div className="modal-section">
               <div className="section-label">last updated</div>

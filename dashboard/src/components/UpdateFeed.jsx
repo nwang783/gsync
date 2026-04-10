@@ -7,6 +7,7 @@ export default function UpdateFeed({ teamId }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(10);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -25,6 +26,10 @@ export default function UpdateFeed({ teamId }) {
     });
     return unsub;
   }, [teamId]);
+
+  useEffect(() => {
+    setVisibleCount(10);
+  }, [teamId, plans.length]);
 
   const events = [];
 
@@ -58,7 +63,8 @@ export default function UpdateFeed({ teamId }) {
     return tb - ta;
   });
 
-  const display = events.slice(0, 50);
+  const display = events.slice(0, visibleCount);
+  const hasMore = events.length > display.length;
 
   if (loading) {
     return (
@@ -103,6 +109,15 @@ export default function UpdateFeed({ teamId }) {
           </div>
         ))}
       </div>
+      {hasMore && (
+        <button
+          type="button"
+          className="feed-load-more"
+          onClick={() => setVisibleCount((count) => count + 10)}
+        >
+          load 10 more
+        </button>
+      )}
     </div>
   );
 }

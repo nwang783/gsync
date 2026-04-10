@@ -3,10 +3,9 @@ import { useState } from 'react';
 const NAV_ITEMS = [
   { id: 'overview', label: 'overview', icon: '~' },
   { id: 'me', label: 'me', icon: '>' },
-  { id: 'activity', label: 'activity', icon: '$' },
 ];
 
-export default function Sidebar({ active, onNavigate, onLogout }) {
+export default function Sidebar({ active, onNavigate, onLogout, seatName, role }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -44,14 +43,19 @@ export default function Sidebar({ active, onNavigate, onLogout }) {
           ))}
         </nav>
 
-        <div className="sidebar-footer">
-          <div className="sidebar-section-label">// status</div>
-          <div className="sidebar-status">
-            <span className="sidebar-status-dot" />
-            <span>connected</span>
+        {(seatName || role) && (
+          <div className="sidebar-identity sidebar-identity--footer">
+            <div className="sidebar-identity-card">
+              <div className="sidebar-identity-kicker">current seat</div>
+              {seatName && <div className="sidebar-seat-name">{seatName}</div>}
+              {role && <div className="sidebar-role-label">{role}</div>}
+            </div>
           </div>
+        )}
+
+        <div className="sidebar-footer">
           {onLogout && (
-            <button className="sidebar-link" onClick={onLogout} style={{ marginTop: '8px' }}>
+            <button className="sidebar-link sidebar-logout" onClick={onLogout}>
               <span className="sidebar-link-icon">×</span>
               <span className="sidebar-link-label">logout</span>
             </button>

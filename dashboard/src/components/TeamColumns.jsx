@@ -2,7 +2,21 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { relativeTime } from '../utils.js';
-import StaleBadge from './StaleBadge.jsx';
+import { getPlanGoalTags } from '../lib/planTags.js';
+
+function getUpdatedAtMs(updatedAt) {
+  if (!updatedAt) return 0;
+  if (updatedAt instanceof Date) return updatedAt.getTime();
+  if (typeof updatedAt.toDate === 'function') return updatedAt.toDate().getTime();
+  if (typeof updatedAt.seconds === 'number') return updatedAt.seconds * 1000;
+  if (typeof updatedAt === 'number') return updatedAt;
+  return 0;
+}
+
+function getLatestUpdate(updates) {
+  if (!Array.isArray(updates) || updates.length === 0) return null;
+  return [...updates].sort((a, b) => getUpdatedAtMs(b.timestamp) - getUpdatedAtMs(a.timestamp))[0] || null;
+}
 
 export default function TeamColumns({ teamId, onSelectPlan }) {
   const [plans, setPlans] = useState([]);
@@ -38,7 +52,12 @@ export default function TeamColumns({ teamId, onSelectPlan }) {
     byAuthor[author].push(plan);
   }
 
+  for (const author of Object.keys(byAuthor)) {
+    byAuthor[author].sort((a, b) => getUpdatedAtMs(b.updatedAt) - getUpdatedAtMs(a.updatedAt));
+  }
+
   const authors = Object.keys(byAuthor).sort();
+  const showEmptyPartnerSlot = authors.length === 1;
 
   if (loading) {
     return <div className="empty-state">loading...</div>;
@@ -68,30 +87,65 @@ export default function TeamColumns({ teamId, onSelectPlan }) {
           </div>
         </div>
       ))}
+      {showEmptyPartnerSlot && <EmptyAuthorColumn />}
+    </div>
+  );
+}
+
+function EmptyAuthorColumn() {
+  return (
+    <div className="author-column author-column--placeholder" aria-hidden="true">
+      <div className="author-name">waiting for another teammate</div>
+      <div className="empty-author-card">
+        <div className="empty-author-copy">
+          The next contributor will appear here once they publish an active plan.
+        </div>
+        <div className="empty-author-skeleton">
+          <div className="skeleton-chip" />
+          <div className="skeleton-line skeleton-line--long" />
+          <div className="skeleton-line skeleton-line--mid" />
+          <div className="skeleton-line skeleton-line--short" />
+        </div>
+      </div>
     </div>
   );
 }
 
 function PlanCard({ plan, onClick }) {
-  const statusClass = (plan.status || 'draft').replace(/\s+/g, '-');
-  const touches = Array.isArray(plan.touches) ? plan.touches : [];
+  const goalTags = getPlanGoalTags(plan);
+  const latestUpdate = getLatestUpdate(plan.updates);
+  const isGoalUpdateCard = goalTags.length > 0 && latestUpdate;
 
   return (
-    <div className="plan-card" onClick={onClick}>
+    <button
+      type="button"
+      className={`plan-card ${isGoalUpdateCard ? 'plan-card--update' : ''}`}
+      onClick={onClick}
+    >
       <div className="plan-card-header">
         <span className="slug">{plan.slug || plan.id}</span>
-        <span className={`status-badge ${statusClass}`}>{plan.status}</span>
-        <StaleBadge updatedAt={plan.updatedAt} />
+        {isGoalUpdateCard && <span className="plan-update-badge">plan update</span>}
       </div>
-      {plan.summary && <div className="summary">{plan.summary}</div>}
-      {plan.alignment && <div className="alignment">&gt; {plan.alignment}</div>}
-      {touches.length > 0 && (
-        <div className="touches">
-          {touches.map((t, i) => (
-            <span key={i} className="touch-tag">{t}</span>
-          ))}
-        </div>
-      )}
+      <div className="plan-card-main">
+        {goalTags.length > 0 && (
+          <div className="plan-goal-tags">
+            {goalTags.map((tag) => (
+              <span key={tag} className={`plan-goal-tag plan-goal-tag--${tag.startsWith('2') ? '2week' : '3day'}`}>{tag}</span>
+            ))}
+          </div>
+        )}
+        {isGoalUpdateCard ? (
+          <>
+            <div className="plan-update-note">{latestUpdate.note || 'Updated goal-linked plan'}</div>
+            <div className="plan-update-meta">
+              Updated {relativeTime(latestUpdate.timestamp)}
+              {latestUpdate.author && ` by ${latestUpdate.author}`}
+            </div>
+          </>
+        ) : (
+          plan.summary && <div className="summary">{plan.summary}</div>
+        )}
+      </div>
       <div className="card-footer">
         <span>{relativeTime(plan.updatedAt)}</span>
         {plan.prUrl && /^https?:\/\//i.test(plan.prUrl) && (
@@ -105,6 +159,6 @@ function PlanCard({ plan, onClick }) {
           </a>
         )}
       </div>
-    </div>
+    </button>
   );
 }

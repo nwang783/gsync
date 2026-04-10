@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { signInWithCustomToken, onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from './firebase.js';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from './firebase.js';
 
 const AuthContext = createContext(null);
 
@@ -8,6 +9,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(undefined); // undefined = loading, null = not authed
   const [teamId, setTeamId] = useState(null);
   const [role, setRole] = useState(null);
+  const [seatName, setSeatName] = useState(null);
   const [claimsReady, setClaimsReady] = useState(false);
 
   useEffect(() => {
@@ -17,13 +19,23 @@ export function AuthProvider({ children }) {
         setClaimsReady(false);
         // Extract custom claims from the token
         firebaseUser.getIdTokenResult()
-          .then((result) => {
-            setTeamId(result.claims.teamId || null);
-            setRole(result.claims.role || null);
+          .then(async (result) => {
+            const nextTeamId = result.claims.teamId || null;
+            const nextRole = result.claims.role || null;
+            setTeamId(nextTeamId);
+            setRole(nextRole);
+
+            if (nextTeamId && firebaseUser.uid) {
+              const membershipSnap = await getDoc(doc(db, 'teams', nextTeamId, 'memberships', firebaseUser.uid));
+              setSeatName(membershipSnap.exists() ? membershipSnap.data().seatName || firebaseUser.uid : firebaseUser.uid);
+            } else {
+              setSeatName(firebaseUser.uid || null);
+            }
           })
           .catch(() => {
             setTeamId(null);
             setRole(null);
+            setSeatName(null);
           })
           .finally(() => {
             setClaimsReady(true);
@@ -32,6 +44,7 @@ export function AuthProvider({ children }) {
         setUser(null);
         setTeamId(null);
         setRole(null);
+        setSeatName(null);
         setClaimsReady(true);
       }
     });
@@ -53,6 +66,7 @@ export function AuthProvider({ children }) {
     await signInWithCustomToken(auth, data.firebaseToken);
     setTeamId(data.teamId);
     setRole(data.role);
+    setSeatName(data.seatName || null);
     return data;
   };
 
@@ -61,7 +75,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, teamId, role, login, logout, loading: user === undefined || (Boolean(user) && !claimsReady) }}>
+    <AuthContext.Provider value={{ user, teamId, role, seatName, login, logout, loading: user === undefined || (Boolean(user) && !claimsReady) }}>
       {children}
     </AuthContext.Provider>
   );
