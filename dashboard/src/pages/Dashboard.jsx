@@ -5,6 +5,7 @@ import GoalBar from '../components/GoalBar.jsx';
 import TeamColumns from '../components/TeamColumns.jsx';
 import UpdateFeed from '../components/UpdateFeed.jsx';
 import PlanDetail from '../components/PlanDetail.jsx';
+import MemoryPanel from '../components/MemoryPanel.jsx';
 
 export default function Dashboard() {
   const { teamId, role, seatName, logout, loading } = useAuth();
@@ -32,6 +33,7 @@ export default function Dashboard() {
         {activePage === 'overview' && (
           <>
             <GoalBar teamId={teamId} onSelectPlan={setSelectedPlanId} />
+            <MemoryPanel teamId={teamId} />
             <UpdateFeed teamId={teamId} />
             <section className="overview-history-section">
               <h2>## individual histories</h2>
