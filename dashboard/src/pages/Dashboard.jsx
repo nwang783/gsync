@@ -7,7 +7,7 @@ import UpdateFeed from '../components/UpdateFeed.jsx';
 import PlanDetail from '../components/PlanDetail.jsx';
 
 export default function Dashboard() {
-  const { teamId, role, logout, loading } = useAuth();
+  const { teamId, role, seatName, logout, loading } = useAuth();
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [activePage, setActivePage] = useState('overview');
 
@@ -22,28 +22,35 @@ export default function Dashboard() {
 
   return (
     <div className="app-shell">
-      <Sidebar active={activePage} onNavigate={setActivePage} onLogout={logout} />
+      <Sidebar active={activePage} onNavigate={setActivePage} onLogout={logout} seatName={seatName} role={role} />
 
       <main className="app-main">
         <div className="app-header">
           <h1>{activePage === 'overview' ? '# overview' : activePage === 'me' ? '# me' : '# activity'}</h1>
-          <span className="team-id">{teamId}</span>
-          {role && <span className="role-badge">{role}</span>}
         </div>
 
         {activePage === 'overview' && (
           <>
-            <GoalBar teamId={teamId} />
-            <TeamColumns teamId={teamId} onSelectPlan={setSelectedPlanId} />
+            <GoalBar teamId={teamId} onSelectPlan={setSelectedPlanId} />
             <UpdateFeed teamId={teamId} />
+            <section className="overview-history-section">
+              <h2>## individual histories</h2>
+              <TeamColumns teamId={teamId} onSelectPlan={setSelectedPlanId} />
+            </section>
           </>
         )}
 
         {activePage === 'me' && (
           <div className="page-placeholder">
-            <div className="placeholder-icon">&gt;_</div>
-            <div className="placeholder-title">your workspace</div>
-            <div className="placeholder-desc">your plans, progress, and personal activity will live here.</div>
+            <div className="placeholder-icon">...</div>
+            <div className="placeholder-title">coming soon</div>
+            <div className="placeholder-desc">Your personal workspace will collect your plans, updates, and recent pushes in one place.</div>
+            <div className="coming-soon-card" aria-hidden="true">
+              <div className="coming-soon-chip">me</div>
+              <div className="coming-soon-line coming-soon-line--long" />
+              <div className="coming-soon-line coming-soon-line--mid" />
+              <div className="coming-soon-line coming-soon-line--short" />
+            </div>
           </div>
         )}
 
