@@ -9,3 +9,4 @@ dashboard/.env
 *.log
 .firebase/
 .dev/
+nomergeconflicts-firebase-adminsdk-fbsvc-1155d26ddc.json
