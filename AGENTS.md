@@ -33,6 +33,7 @@ npm run dev:cli -- memory reviewer-context
 ```
 
 The wrapper runs gsync with `HOME=./.dev/home`.
+Do not use plain `gsync ...` for local verification in this repo unless you intentionally want to hit your real global `~/.gsync` config and hosted backend.
 
 ## Smoke test the local setup
 
@@ -68,4 +69,6 @@ For local onboarding work, prefer `npm run dev:creds` after `npm run dev:up` so 
 
 - Keep all sandbox work inside `./.dev/`.
 - Do not use the repo’s real `~/.gsync` data when testing local changes.
+- For repo-local emulator work, always use `npm run dev:cli -- ...` so commands run with `HOME=./.dev/home` and `useEmulators=true`.
+- Plain `gsync ...` remains global and should be treated as hosted unless you explicitly override `HOME`.
 - If the stack is already running, `npm run dev:status` will show the active pids and paths.
