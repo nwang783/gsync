@@ -13,6 +13,8 @@ const DEV_HOME = path.join(DEV_DIR, 'home');
 const DEV_STATE_FILE = path.join(DEV_DIR, 'state.json');
 const DEV_SEED_FILE = path.join(DEV_DIR, 'seed.json');
 const DEV_PLAN_FILE = path.join(DEV_DIR, 'seed-plan.md');
+const DEV_TWO_WEEK_GOAL_FILE = path.join(DEV_DIR, 'seed-goal-2week.md');
+const DEV_THREE_DAY_GOAL_FILE = path.join(DEV_DIR, 'seed-goal-3day.md');
 const CLI_BIN = path.join(ROOT, 'bin', 'gsync.js');
 const FIREBASE_PROJECT_ID = 'nomergeconflicts';
 const FIREBASE_API_KEY = 'demo-local-api-key';
@@ -26,6 +28,33 @@ function ensureDevDirs() {
 
 function stripAnsi(text) {
   return String(text || '').replace(/\u001b\[[0-9;]*m/g, '');
+}
+
+function writeSeedPlan(filePath, {
+  slug,
+  summary,
+  alignment,
+  outOfScope,
+  status = 'in-progress',
+  author = 'agent-admin',
+  touches = [],
+  body,
+}) {
+  const lines = [
+    '---',
+    `slug: ${slug}`,
+    `summary: ${summary}`,
+    `alignment: ${alignment}`,
+    `outOfScope: ${outOfScope}`,
+    `status: ${status}`,
+    `author: ${author}`,
+    `touches: ${touches.join(', ')}`,
+    '---',
+    '',
+    body.trim(),
+    '',
+  ];
+  fs.writeFileSync(filePath, lines.join('\n'), 'utf8');
 }
 
 function runSync(command, args, { cwd = ROOT, env = {}, inheritStdio = false } = {}) {
@@ -360,8 +389,25 @@ async function seedDevData() {
   const peerSeatKey = extractJoinSeatKey(joinResult.stdout);
   runCli(['login', '--key', team.seatKey], { inheritStdio: true });
 
-  runCli(['goals', 'set-2week', '--goal', 'Ship the unified company memory timeline and keep reviewer context fresh'], { inheritStdio: true });
-  runCli(['goals', 'set-3day', '--goal', 'Verify local dev stack, direct memory writes, and sync refresh handling'], { inheritStdio: true });
+  writeSeedPlan(DEV_TWO_WEEK_GOAL_FILE, {
+    slug: 'dev-goal-2week',
+    summary: 'Ship the unified company memory timeline and keep reviewer context fresh',
+    alignment: 'Validate the current goal-setting path through canonical plans in the local sandbox',
+    outOfScope: 'Hosted data, production credentials, or long-term planning policy',
+    touches: ['src/cli.js', 'src/context.js', 'dashboard/src/App.jsx'],
+    body: '# Seeded 2-week goal\n\nThis local-only plan exists so the sandbox can seed the current 2-week team goal through `gsync plan push --goal 2week`.',
+  });
+  runCli(['plan', 'push', DEV_TWO_WEEK_GOAL_FILE, '--goal', '2week'], { inheritStdio: true });
+
+  writeSeedPlan(DEV_THREE_DAY_GOAL_FILE, {
+    slug: 'dev-goal-3day',
+    summary: 'Verify local dev stack, direct memory writes, and sync refresh handling',
+    alignment: 'Exercise the short-horizon goal path used by the dashboard and reviewer context',
+    outOfScope: 'Remote environments, production auth, or non-sandbox verification',
+    touches: ['scripts/dev-env.mjs', 'src/firestore.js', 'dashboard/src/components/ActivitySummary.jsx'],
+    body: '# Seeded 3-day goal\n\nThis local-only plan exists so the sandbox can seed the current 3-day team goal through `gsync plan push --goal 3day`.',
+  });
+  runCli(['plan', 'push', DEV_THREE_DAY_GOAL_FILE, '--goal', '3day'], { inheritStdio: true });
 
   const companyMemory = runCli(['memory', 'add', '--title', 'Company brief', '--body', 'We sell confidence for small teams.']);
   extractMemoryId(companyMemory.stdout);
@@ -369,7 +415,14 @@ async function seedDevData() {
   runCli(['memory', 'add', '--title', 'Decision', '--body', 'A single memories collection keeps the UI and CLI simpler.']);
   runCli(['memory', 'add', '--title', 'Open question', '--body', 'Should the agent sync before every reviewer-context read?']);
 
-  fs.writeFileSync(DEV_PLAN_FILE, `---\nslug: dev-memory-loop\nsummary: Seed local memory dev loop\nalignment: Validates the unified memory timeline and dashboard visibility\noutOfScope: Production data, remote deploys, or long-term storage design\nstatus: in-progress\nauthor: agent-admin\ntouches: src/context.js, src/firestore.js, dashboard/src/components/MemoryPanel.jsx\n---\n\n# Seeded local dev plan\n\nThis plan exists only so the local dashboard has a realistic active plan to render.\n`, 'utf8');
+  writeSeedPlan(DEV_PLAN_FILE, {
+    slug: 'dev-memory-loop',
+    summary: 'Seed local memory dev loop',
+    alignment: 'Validates the unified memory timeline and dashboard visibility',
+    outOfScope: 'Production data, remote deploys, or long-term storage design',
+    touches: ['src/context.js', 'src/firestore.js', 'dashboard/src/components/MemoryPanel.jsx'],
+    body: '# Seeded local dev plan\n\nThis plan exists only so the local dashboard has a realistic active plan to render.',
+  });
   const planPush = runCli(['plan', 'push', DEV_PLAN_FILE]);
   const planId = extractPlanId(planPush.stdout);
   runCli(['plan', 'update', planId, '--note', 'Seeded demo plan for local dev testing.'], { inheritStdio: true });

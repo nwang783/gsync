@@ -11,12 +11,33 @@ const MODEL_ALLOWLIST = new Set([
 ]);
 
 const ACTIVE_STATUSES = new Set(['proposed', 'draft', 'in-progress', 'review']);
+const STALE_THRESHOLD_MS = 2 * 24 * 60 * 60 * 1000;   // 2 days — plan hasn't been updated
+const ABANDON_THRESHOLD_MS = 4 * 24 * 60 * 60 * 1000; // 4 days — candidate for abandon
+
+const RECOMMENDATION_ITEM_SCHEMA = z.object({
+  planId: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  reason: z.string(),
+  confidence: z.number().min(0).max(1),
+  evidence: z.array(z.string()).max(3),
+});
+
 const SUMMARY_SCHEMA = z.object({
   headline: z.string().min(1).max(160),
   summaryBullets: z.array(z.string().min(1).max(220)).min(1).max(4),
   riskFlags: z.array(z.string().min(1).max(220)).max(4),
   nextActions: z.array(z.string().min(1).max(220)).max(4),
   confidence: z.number().min(0).max(1),
+  agent: z.object({
+    mood: z.enum(['focused', 'celebrating', 'worried', 'nudging', 'idle']),
+  }),
+  recommendations: z.object({
+    closeCandidates: z.array(
+      RECOMMENDATION_ITEM_SCHEMA.extend({ action: z.enum(['merged', 'abandoned']) })
+    ).max(3),
+    nextCandidates: z.array(RECOMMENDATION_ITEM_SCHEMA).max(3),
+  }),
 });
 
 function toMillis(timestamp) {
@@ -64,6 +85,12 @@ function resolveActivitySummaryModel(env = process.env) {
   return { provider, model };
 }
 
+function formatAgeLabel(ms) {
+  const hours = Math.round(ms / (60 * 60 * 1000));
+  if (hours < 24) return `${hours}h`;
+  return `${(ms / (24 * 60 * 60 * 1000)).toFixed(1)}d`;
+}
+
 function normalizePlan(plan) {
   if (!plan) return null;
   return {
@@ -72,6 +99,8 @@ function normalizePlan(plan) {
     status: String(plan.status || 'unknown').trim(),
     author: String(plan.author || 'unknown').trim(),
     summary: String(plan.summary || '').trim(),
+    alignment: String(plan.alignment || '').trim(),
+    outOfScope: String(plan.outOfScope || '').trim(),
     createdAt: plan.createdAt || null,
     updatedAt: plan.updatedAt || null,
     updates: Array.isArray(plan.updates) ? plan.updates : [],
@@ -91,6 +120,108 @@ function summarizeRecentUpdates(plan) {
       note: String(update.note || '').trim(),
     }))
     .filter((event) => event.timestamp);
+}
+
+function computeCloseCandidates(normalizedPlans, nowMs) {
+  const candidates = [];
+  for (const plan of normalizedPlans) {
+    const updatedMs = toMillis(plan.updatedAt);
+    const ageMs = updatedMs ? nowMs - updatedMs : null;
+
+    // Merged candidate: has PR url but status hasn't caught up
+    if (plan.prUrl && ACTIVE_STATUSES.has(plan.status)) {
+      const evidence = [`pr: ${plan.prUrl.replace(/^https?:\/\/[^/]+\//, '')}`];
+      if (ageMs !== null) evidence.push(`last updated ${formatAgeLabel(ageMs)} ago`);
+      candidates.push({
+        planId: plan.id,
+        slug: plan.slug,
+        title: (plan.summary || plan.slug).slice(0, 80),
+        reason: 'Plan has a PR url but status has not been updated to merged',
+        confidence: 0.75,
+        action: 'merged',
+        evidence,
+      });
+    } else if (ACTIVE_STATUSES.has(plan.status) && ageMs !== null && ageMs > ABANDON_THRESHOLD_MS) {
+      // Abandoned candidate: stale active plan
+      const evidence = [`stale ${formatAgeLabel(ageMs)}`];
+      if (!plan.alignment) evidence.push('no goal alignment');
+      candidates.push({
+        planId: plan.id,
+        slug: plan.slug,
+        title: (plan.summary || plan.slug).slice(0, 80),
+        reason: 'Active plan with no updates for an extended period',
+        confidence: Math.min(0.85, 0.5 + ageMs / (10 * 24 * 60 * 60 * 1000)),
+        action: 'abandoned',
+        evidence,
+      });
+    }
+  }
+  return candidates.slice(0, 3);
+}
+
+function computeNextCandidates(normalizedPlans, goals, nowMs) {
+  const threeDayGoalText = String(goals.threeDay || '').toLowerCase();
+  const twoWeekGoalText = String(goals.twoWeek || '').toLowerCase();
+  const candidates = [];
+
+  const workable = normalizedPlans.filter(
+    (p) => p.status === 'proposed' || p.status === 'draft' || p.status === 'in-progress'
+  );
+
+  for (const plan of workable) {
+    const alignLower = plan.alignment.toLowerCase();
+    const evidence = [];
+    let score = 0;
+
+    // 3-day alignment signals
+    if (threeDayGoalText && alignLower && (
+      alignLower.includes('3-day') ||
+      alignLower.includes('3day') ||
+      alignLower.includes('threeday') ||
+      (threeDayGoalText.length > 5 && alignLower.includes(threeDayGoalText.slice(0, 15)))
+    )) {
+      score += 2;
+      evidence.push('supports 3-day target');
+    }
+    // 2-week alignment signals
+    if (twoWeekGoalText && alignLower && (
+      alignLower.includes('2-week') ||
+      alignLower.includes('2week') ||
+      alignLower.includes('twoweek') ||
+      (twoWeekGoalText.length > 5 && alignLower.includes(twoWeekGoalText.slice(0, 15)))
+    )) {
+      score += 1;
+      evidence.push('supports 2-week goal');
+    }
+    // Recent activity bonus
+    const updatedMs = toMillis(plan.updatedAt);
+    if (updatedMs && (nowMs - updatedMs) < 24 * 60 * 60 * 1000) {
+      score += 1;
+      evidence.push('active in last 24h');
+    }
+
+    if (plan.alignment && !evidence.some((e) => e.startsWith('supports'))) {
+      evidence.push(`aligned: ${plan.alignment.slice(0, 60)}`);
+      score = Math.max(score, 1);
+    }
+
+    if (score > 0) {
+      candidates.push({
+        planId: plan.id,
+        slug: plan.slug,
+        title: (plan.summary || plan.slug).slice(0, 80),
+        reason: 'Plan advances current team goals',
+        confidence: Math.min(0.9, 0.4 + score * 0.15),
+        evidence,
+        _score: score,
+      });
+    }
+  }
+
+  return candidates
+    .sort((a, b) => b._score - a._score)
+    .map(({ _score, ...c }) => c)
+    .slice(0, 3);
 }
 
 function buildActivitySummarySource({
@@ -153,16 +284,29 @@ function buildActivitySummarySource({
       note: String(event.note || '').slice(0, 180),
     }));
 
+  // PM-agent signals
+  const stalePlans = normalizedPlans.filter(
+    (p) => ACTIVE_STATUSES.has(p.status) && toMillis(p.updatedAt) && (nowMs - toMillis(p.updatedAt)) > STALE_THRESHOLD_MS
+  );
+  const reviewQueueCount = normalizedPlans.filter((p) => p.status === 'review').length;
+  const recentMerges = normalizedPlans.filter(
+    (p) => p.status === 'merged' && toMillis(p.updatedAt) && (nowMs - toMillis(p.updatedAt)) < 48 * 60 * 60 * 1000
+  );
+
+  const goals = {
+    twoWeek: String(twoWeekGoal || '').trim(),
+    threeDay: String(threeDayGoal || '').trim(),
+  };
+  const closeCandidates = computeCloseCandidates(normalizedPlans, nowMs);
+  const nextCandidates = computeNextCandidates(normalizedPlans, goals, nowMs);
+
   return {
     scope: {
       kind: 'team',
       id: teamId,
       name: teamName,
     },
-    goals: {
-      twoWeek: String(twoWeekGoal || '').trim(),
-      threeDay: String(threeDayGoal || '').trim(),
-    },
+    goals,
     stats: {
       totalPlans: normalizedPlans.length,
       activePlans,
@@ -171,6 +315,15 @@ function buildActivitySummarySource({
       contributors: contributors.length,
       contributorNames: contributors,
     },
+    signals: {
+      stalePlanCount: stalePlans.length,
+      stalePlanSlugs: stalePlans.map((p) => p.slug).slice(0, 5),
+      reviewQueueCount,
+      recentMergeCount: recentMerges.length,
+      recentMergeSlugs: recentMerges.map((p) => p.slug).slice(0, 5),
+      goalCoverage: normalizedPlans.filter((p) => p.alignment).length,
+    },
+    candidates: { closeCandidates, nextCandidates },
     recentPlans,
     recentActivity,
     sourceWindow: {
@@ -187,6 +340,8 @@ function buildActivitySummaryPrompt(source) {
     scope: source.scope,
     goals: source.goals,
     stats: source.stats,
+    signals: source.signals || null,
+    candidates: source.candidates || null,
     recentPlans: source.recentPlans,
     recentActivity: source.recentActivity,
     sourceWindow: source.sourceWindow,
@@ -197,6 +352,10 @@ function buildActivitySummaryPrompt(source) {
       'Keep it concise, direct, and operational.',
       'Mention coordination risk when the recent activity suggests drift or overload.',
       'Prefer exact plan slugs, statuses, and updates from the input.',
+      'Set agent.mood to: celebrating if recentMergeCount > 0 and stalePlanCount is 0; worried if stalePlanCount >= 2 or reviewQueueCount >= 3; nudging if closeCandidates or nextCandidates are non-empty; focused otherwise.',
+      'For recommendations, use only the plans listed in candidates.closeCandidates and candidates.nextCandidates. Do not invent new ones. You may reorder or reduce the list based on your analysis.',
+      'Use advisory language: "consider closing", "likely next", "stale — may need attention".',
+      'Explicitly name the recommended terminal action (mark merged / abandon) for close candidates.',
     ],
   }, null, 2);
 }
@@ -263,6 +422,7 @@ function buildActivitySummaryDocument({
     sourceWindow: source.sourceWindow,
     stats: source.stats,
     goals: source.goals,
+    signals: source.signals || null,
     generatedAt: now.toISOString(),
     updatedAt: now.toISOString(),
     headline: output.headline,
@@ -271,6 +431,13 @@ function buildActivitySummaryDocument({
     nextActions: output.nextActions,
     confidence: output.confidence,
   };
+
+  if (output.agent) {
+    payload.agent = output.agent;
+  }
+  if (output.recommendations) {
+    payload.recommendations = output.recommendations;
+  }
 
   if (previousDocument && previousDocument.error) {
     payload.error = null;
@@ -308,12 +475,17 @@ module.exports = {
   DEFAULT_MODEL,
   FEATURE_KEY,
   MODEL_ALLOWLIST,
+  RECOMMENDATION_ITEM_SCHEMA,
   SUMMARY_SCHEMA,
+  STALE_THRESHOLD_MS,
+  ABANDON_THRESHOLD_MS,
   buildActivitySummaryDocument,
   buildActivitySummaryErrorDocument,
   buildActivitySummaryFingerprint,
   buildActivitySummaryPrompt,
   buildActivitySummarySource,
+  computeCloseCandidates,
+  computeNextCandidates,
   generateActivitySummary,
   getAiApiKey,
   normalizePlan,
