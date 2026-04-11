@@ -8,7 +8,9 @@ const firebaseConfig = {
   authDomain: `${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'nomergeconflicts'}.firebaseapp.com`,
 };
 
-const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
+// Never connect a production bundle to local emulators, even if a broad .env leaks
+// development defaults into the build environment.
+const useEmulators = import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true';
 const firestoreHost = import.meta.env.VITE_FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
 const authHost = import.meta.env.VITE_AUTH_EMULATOR_HOST || '127.0.0.1:9099';
 
