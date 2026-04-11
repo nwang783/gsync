@@ -136,6 +136,8 @@ gsync plan review <id> --pr https://github.com/org/repo/pull/123
 gsync plan merged <id>
 ```
 
+If you use GitHub, include `Plan: <id>` in the PR body as well. That gives merge automation a fallback if the `prUrl` link was not written onto the plan record.
+
 Humans can also join from the dashboard login page with the same join code and a seat name. Use `gsync login --key <seat-key>` for returning seats, and `gsync join --code <join-code> --seat-name <name>` for new seats.
 
 ## Approval-Gated Memory

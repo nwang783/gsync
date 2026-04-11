@@ -323,7 +323,7 @@ When your PR is open:
 gsync plan review <id> --pr https://github.com/org/repo/pull/847
 ```
 
-Also paste the plan ID into the PR description body so the dashboard can cross-link them:
+Also paste the plan ID into the PR description body so the dashboard can cross-link them and merge automation can still resolve the plan if the PR URL link is missing:
 
 ```
 ## Context
