@@ -256,10 +256,10 @@ function resetDevStack() {
   console.log('Removed local dev state.');
 }
 
-function extractDraftId(output) {
-  const match = stripAnsi(output).match(/Conversation draft created:\s*([a-zA-Z0-9-]+)/);
+function extractMemoryId(output) {
+  const match = stripAnsi(output).match(/Memory added:\s*([a-zA-Z0-9-]+)/);
   if (!match) {
-    throw new Error(`Could not parse draft id from output:\n${output}`);
+    throw new Error(`Could not parse memory id from output:\n${output}`);
   }
   return match[1];
 }
@@ -360,24 +360,16 @@ async function seedDevData() {
   const peerSeatKey = extractJoinSeatKey(joinResult.stdout);
   runCli(['login', '--key', team.seatKey], { inheritStdio: true });
 
-  runCli(['goals', 'set-2week', '--goal', 'Ship the company memory layer and keep reviewer context fail-closed'], { inheritStdio: true });
-  runCli(['goals', 'set-3day', '--goal', 'Verify local dev stack, memory approval flow, and sync refresh handling'], { inheritStdio: true });
+  runCli(['goals', 'set-2week', '--goal', 'Ship the unified company memory timeline and keep reviewer context fresh'], { inheritStdio: true });
+  runCli(['goals', 'set-3day', '--goal', 'Verify local dev stack, direct memory writes, and sync refresh handling'], { inheritStdio: true });
 
-  const companyDraft = runCli(['memory', 'draft', '--title', 'Company brief', '--body', 'We sell confidence for small teams.']);
-  const companyDraftId = extractDraftId(companyDraft.stdout);
-  runCli(['memory', 'approve', companyDraftId, '--to', 'companyBrief'], { inheritStdio: true });
+  const companyMemory = runCli(['memory', 'add', '--title', 'Company brief', '--body', 'We sell confidence for small teams.']);
+  extractMemoryId(companyMemory.stdout);
+  runCli(['memory', 'add', '--title', 'Project brief', '--body', 'This quarter focuses on onboarding, reliability, and memory visibility.']);
+  runCli(['memory', 'add', '--title', 'Decision', '--body', 'A single memories collection keeps the UI and CLI simpler.']);
+  runCli(['memory', 'add', '--title', 'Open question', '--body', 'Should the agent sync before every reviewer-context read?']);
 
-  const projectDraft = runCli(['memory', 'draft', '--title', 'Project brief', '--body', 'This quarter focuses on onboarding, reliability, and memory visibility.']);
-  const projectDraftId = extractDraftId(projectDraft.stdout);
-  runCli(['memory', 'approve', projectDraftId, '--to', 'projectBrief'], { inheritStdio: true });
-
-  const decisionDraft = runCli(['memory', 'draft', '--title', 'Memory policy', '--body', 'Approve drafts before they become durable memory.']);
-  const decisionDraftId = extractDraftId(decisionDraft.stdout);
-  runCli(['memory', 'approve', decisionDraftId, '--to', 'decisionLog'], { inheritStdio: true });
-
-  runCli(['memory', 'draft', '--title', 'Open question', '--body', 'Should the agent sync before every reviewer-context read?']);
-
-  fs.writeFileSync(DEV_PLAN_FILE, `---\nslug: dev-memory-loop\nsummary: Seed local memory dev loop\nalignment: Validates the approval-gated memory flow and dashboard visibility\noutOfScope: Production data, remote deploys, or long-term storage design\nstatus: in-progress\nauthor: agent-admin\ntouches: src/context.js, src/firestore.js, dashboard/src/components/MemoryPanel.jsx\n---\n\n# Seeded local dev plan\n\nThis plan exists only so the local dashboard has a realistic active plan to render.\n`, 'utf8');
+  fs.writeFileSync(DEV_PLAN_FILE, `---\nslug: dev-memory-loop\nsummary: Seed local memory dev loop\nalignment: Validates the unified memory timeline and dashboard visibility\noutOfScope: Production data, remote deploys, or long-term storage design\nstatus: in-progress\nauthor: agent-admin\ntouches: src/context.js, src/firestore.js, dashboard/src/components/MemoryPanel.jsx\n---\n\n# Seeded local dev plan\n\nThis plan exists only so the local dashboard has a realistic active plan to render.\n`, 'utf8');
   const planPush = runCli(['plan', 'push', DEV_PLAN_FILE]);
   const planId = extractPlanId(planPush.stdout);
   runCli(['plan', 'update', planId, '--note', 'Seeded demo plan for local dev testing.'], { inheritStdio: true });
@@ -385,8 +377,8 @@ async function seedDevData() {
   runCli(['sync'], { inheritStdio: true });
 
   const reviewerContext = runCli(['memory', 'reviewer-context']);
-  if (!/Approved Company Brief/i.test(reviewerContext.stdout) || !/Approved Project Brief/i.test(reviewerContext.stdout)) {
-    throw new Error(`Reviewer context did not include approved memory:\n${reviewerContext.stdout}`);
+  if (!/## Memories/i.test(reviewerContext.stdout) || !/Company brief/i.test(reviewerContext.stdout)) {
+    throw new Error(`Reviewer context did not include memory entries:\n${reviewerContext.stdout}`);
   }
 
   const seed = {
@@ -418,7 +410,7 @@ async function smokeTest() {
   await seedDevData();
 
   const homeCheck = runCli(['memory', 'reviewer-context']);
-  if (!/Approved Company Brief/i.test(homeCheck.stdout)) {
+  if (!/## Memories/i.test(homeCheck.stdout)) {
     throw new Error('Reviewer context smoke check failed.');
   }
 
@@ -427,9 +419,8 @@ async function smokeTest() {
     throw new Error(`Dashboard smoke check failed: ${dashboardResp.status}`);
   }
 
-  const staleDraft = runCli(['memory', 'draft', '--title', 'Updated company brief', '--body', 'We help teams stay aligned when approved memory changes.']);
-  const staleDraftId = extractDraftId(staleDraft.stdout);
-  runCli(['memory', 'approve', staleDraftId, '--to', 'companyBrief'], { inheritStdio: true });
+  const staleMemory = runCli(['memory', 'add', '--title', 'Updated company brief', '--body', 'We help teams stay aligned when memory changes.']);
+  extractMemoryId(staleMemory.stdout);
 
   let failedClosed = false;
   try {
@@ -439,13 +430,13 @@ async function smokeTest() {
   }
 
   if (!failedClosed) {
-    throw new Error('Reviewer context should fail closed after approved memory changes until sync reruns.');
+    throw new Error('Reviewer context should fail closed after memory changes until sync reruns.');
   }
 
   runCli(['sync'], { inheritStdio: true });
   const refreshedContext = runCli(['memory', 'reviewer-context']);
-  if (!/stay aligned when approved memory changes/i.test(refreshedContext.stdout)) {
-    throw new Error('Reviewer context did not refresh after syncing updated approved memory.');
+  if (!/stay aligned when memory changes/i.test(refreshedContext.stdout)) {
+    throw new Error('Reviewer context did not refresh after syncing updated memory.');
   }
 
   console.log('Smoke test passed.');

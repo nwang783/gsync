@@ -26,7 +26,7 @@ describe('JoinCodePanel', () => {
 
     render(<JoinCodePanel teamId="team-123" role="admin" user={user} seatName="Admin Seat" />);
 
-    fireEvent.click(screen.getByRole('button', { name: /create join code/i }));
+    fireEvent.click(screen.getByRole('button', { name: /invite teammate|create join code/i }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
