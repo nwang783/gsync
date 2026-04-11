@@ -60,10 +60,11 @@ export async function getTeamMeta(teamId, type) {
   return snap.data();
 }
 
-export async function setTeamMeta(teamId, type, content, userName) {
+export async function setTeamMeta(teamId, type, planId, summary, userName) {
   const ref = doc(getDb(), 'teams', teamId, 'meta', type);
   await setDoc(ref, {
-    content,
+    planId,
+    summary,
     updatedAt: serverTimestamp(),
     updatedBy: userName,
   });
@@ -403,6 +404,7 @@ export async function upsertPlanContent(teamId, planId, summaryData, markdown, u
         author: summaryData.author,
         status: summaryData.status || 'in-progress',
         prUrl: summaryData.prUrl || null,
+        goalType: summaryData.goalType || null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         revision: 1,
@@ -441,6 +443,7 @@ export async function upsertPlanContent(teamId, planId, summaryData, markdown, u
       touches: summaryData.touches ?? existing.touches ?? [],
       status: summaryData.status || existing.status || 'in-progress',
       prUrl: summaryData.prUrl ?? existing.prUrl ?? null,
+      goalType: summaryData.goalType ?? existing.goalType ?? null,
       updatedAt: serverTimestamp(),
       revision: nextRevision,
       latestBodyUpdatedAt: serverTimestamp(),
@@ -512,6 +515,13 @@ export async function getActivePlans(teamId) {
 export async function getRecentPlans(teamId, count = 20) {
   const col = collection(getDb(), 'teams', teamId, 'plans');
   const q = query(col, orderBy('updatedAt', 'desc'), limitDocs(count));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function getRecentReports(teamId, count = 20) {
+  const col = collection(getDb(), 'teams', teamId, 'reports');
+  const q = query(col, orderBy('createdAt', 'desc'), limitDocs(count));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }

@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { sha256 } = require('../functions/join-codes');
 const {
+  createTeamReport,
+  requireScopedTeamMember,
   requireTeamAdmin,
   requireScopedTeamAdmin,
   issueJoinCodeForTeam,
@@ -38,6 +40,9 @@ function createMemoryDb(seed = {}) {
           id: parts[parts.length - 1],
           ref: makeDocRef(path),
         };
+      },
+      async set(data, opts = {}) {
+        applySet(path, data, Boolean(opts.merge));
       },
     };
   }
@@ -169,6 +174,18 @@ test('requireScopedTeamAdmin rejects refreshing a different team', async () => {
   );
 });
 
+test('requireScopedTeamMember rejects submitting reports to a different team', async () => {
+  const db = createMemoryDb({
+    'teams/team-1/memberships/seat-member': { role: 'member', seatName: 'Guest Seat' },
+  });
+  const req = { get: () => 'Bearer token-member' };
+
+  await assert.rejects(
+    () => requireScopedTeamMember(req, 'team-2', { adminClient: createAdminClient(), dbClient: db }),
+    /Seats can only submit reports for their own team/,
+  );
+});
+
 test('issueJoinCodeForTeam always stores member invites', async () => {
   const db = createMemoryDb();
   const result = await issueJoinCodeForTeam({
@@ -212,4 +229,30 @@ test('joinTeamWithCode lands the new seat on the same team', async () => {
   const seatEntries = [...db._store.entries()].filter(([path]) => path.startsWith('seats/'));
   assert.equal(seatEntries.length, 1);
   assert.equal(seatEntries[0][1].homeTeamId, 'team-1');
+});
+
+test('createTeamReport stores bug reports with seat metadata', async () => {
+  const db = createMemoryDb();
+
+  const report = await createTeamReport({
+    dbClient: db,
+    teamId: 'team-1',
+    seatId: 'seat-member',
+    seatName: 'Guest Seat',
+    role: 'member',
+    payload: {
+      kind: 'bug',
+      title: 'Login copy is confusing',
+      body: 'The CLI told me to retry, but it did not say whether my seat key or network was wrong.',
+      severity: 'high',
+      source: 'cli',
+    },
+  });
+
+  const stored = db._store.get(`teams/team-1/reports/${report.id}`);
+  assert.equal(stored.kind, 'bug');
+  assert.equal(stored.title, 'Login copy is confusing');
+  assert.equal(stored.severity, 'high');
+  assert.equal(stored.createdBySeatName, 'Guest Seat');
+  assert.equal(stored.createdByRole, 'member');
 });

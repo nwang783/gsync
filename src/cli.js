@@ -5,7 +5,7 @@ import path from 'path';
 
 import { fileURLToPath } from 'url';
 import { loadConfig, saveConfig, loadSession, saveSession, clearSession, ensureDirs, PLANS_DIR, CONFIG_FILE, CONTEXT_FILE, INDEX_FILE, SKILL_FILE, getDefaultConfig, hasConfigFile } from './config.js';
-import { initFirebase, cleanup, getTeamMeta, setTeamMeta, getPlanContent, getPlanSummary, getRecentPlans, updatePlanNote, updatePlanStatus, getActivePlans, upsertPlanContent, createMemoryEntry, getMemoryTimeline, saveCompiledContextPack, getCompiledContextPack, getMemoryState } from './firestore.js';
+import { initFirebase, cleanup, getTeamMeta, setTeamMeta, getPlanContent, getPlanSummary, getRecentPlans, getRecentReports, updatePlanNote, updatePlanStatus, getActivePlans, upsertPlanContent, createMemoryEntry, getMemoryTimeline, saveCompiledContextPack, getCompiledContextPack, getMemoryState } from './firestore.js';
 import { buildSyncContextContent, assertReviewerContextReady } from './context.js';
 import { formatPlanSummary, formatPlanSummaryDetail, formatRelativeTime, parseDuration } from './format.js';
 import { buildPulledPlanFile, normalizeTouches, parsePlanFile } from './plan-file.js';
@@ -312,6 +312,7 @@ planCmd
   .option('--out-of-scope <text>', 'out of scope override')
   .option('--touches <paths>', 'comma-separated touched paths override')
   .option('--status <status>', 'status override')
+  .option('--goal <type>', 'set this plan as the team goal: 3day or 2week')
   .action(async (file, opts) => {
     try {
       const { session } = await requireConfig();
@@ -320,6 +321,10 @@ planCmd
       const summary = opts.summary || parsed.metadata.summary;
       if (!summary) {
         throw new Error('Plan summary is required. Add `summary:` to frontmatter or pass `--summary`.');
+      }
+
+      if (opts.goal && opts.goal !== '3day' && opts.goal !== '2week') {
+        throw new Error('--goal must be "3day" or "2week".');
       }
 
       const planId = opts.id || parsed.metadata.id || null;
@@ -335,6 +340,7 @@ planCmd
         author: parsed.metadata.author || session.seatName,
         status: opts.status || parsed.metadata.status || 'in-progress',
         prUrl: parsed.metadata.prUrl || null,
+        goalType: opts.goal || parsed.metadata.goalType || null,
       };
 
       const id = await upsertPlanContent(
@@ -350,7 +356,12 @@ planCmd
       const savedContent = await getPlanContent(session.teamId, id);
       const localPath = writeLocalPlanFile(savedSummary, savedContent);
 
-      console.log(chalk.green(`✓ Plan pushed: ${savedSummary.slug}`));
+      if (opts.goal) {
+        await setTeamMeta(session.teamId, opts.goal, id, savedSummary.summary, session.seatName);
+        console.log(chalk.green(`✓ Plan pushed and set as ${opts.goal} goal: ${savedSummary.slug}`));
+      } else {
+        console.log(chalk.green(`✓ Plan pushed: ${savedSummary.slug}`));
+      }
       console.log(chalk.cyan(`  ID: ${id}`));
       console.log(chalk.cyan(`  Revision: ${savedContent?.revision || savedSummary.revision || 0}`));
       console.log(chalk.cyan(`  Cached at: ${localPath}`));
@@ -445,45 +456,6 @@ planCmd
     }
   });
 
-// --- gsync goals ---
-const goalsCmd = program
-  .command('goals')
-  .description('Manage team goals');
-
-goalsCmd
-  .command('set-2week')
-  .description('Set the 2-week goal')
-  .requiredOption('--goal <text>', 'the 2-week goal')
-  .action(async (opts) => {
-    try {
-      const { session } = await requireConfig();
-      verbose('Setting 2-week goal');
-      await setTeamMeta(session.teamId, '2week', opts.goal, session.seatName);
-      console.log(chalk.green('✓ 2-week goal updated'));
-    } catch (err) {
-      console.error(chalk.red(`Set 2-week goal failed: ${friendlyError(err)}`));
-      if (program.opts().verbose) console.error(err);
-      process.exit(1);
-    }
-  });
-
-goalsCmd
-  .command('set-3day')
-  .description('Set the 3-day target')
-  .requiredOption('--goal <text>', 'the 3-day target')
-  .action(async (opts) => {
-    try {
-      const { session } = await requireConfig();
-      verbose('Setting 3-day target');
-      await setTeamMeta(session.teamId, '3day', opts.goal, session.seatName);
-      console.log(chalk.green('✓ 3-day target updated'));
-    } catch (err) {
-      console.error(chalk.red(`Set 3-day target failed: ${friendlyError(err)}`));
-      if (program.opts().verbose) console.error(err);
-      process.exit(1);
-    }
-  });
-
 // --- gsync memory ---
 const memoryCmd = program
   .command('memory')
@@ -550,6 +522,104 @@ memoryCmd
       console.log(ready.markdown);
     } catch (err) {
       console.error(chalk.red(`Reviewer context failed: ${friendlyError(err)}`));
+      if (program.opts().verbose) console.error(err);
+      process.exit(1);
+    }
+  });
+
+const reportCmd = program
+  .command('report')
+  .description('Submit and inspect gsync product feedback');
+
+async function submitReport(payload, successLabel) {
+  const { session, config } = await requireConfig();
+  const authToken = await getCurrentFirebaseIdToken();
+  const { data, config: activeConfig, fellBackToHosted } = await apiPostWithFallback(
+    config,
+    `/teams/${session.teamId}/reports`,
+    {
+      ...payload,
+      source: 'cli',
+    },
+    { authToken },
+  );
+
+  saveConfig(activeConfig);
+
+  console.log(chalk.green(`✓ ${successLabel}`));
+  if (fellBackToHosted) {
+    console.log(chalk.yellow(`  Switched onboarding to hosted backend: ${activeConfig.apiBaseUrl}`));
+  }
+  console.log(chalk.cyan(`  Report ID: ${data.report.id}`));
+  console.log(chalk.cyan(`  Kind: ${data.report.kind}`));
+  if (data.report.severity) {
+    console.log(chalk.cyan(`  Severity: ${data.report.severity}`));
+  }
+}
+
+reportCmd
+  .command('bug')
+  .description('Submit a gsync bug report')
+  .requiredOption('--title <text>', 'short bug title')
+  .requiredOption('--body <text>', 'what broke, why it was confusing, and what should have happened')
+  .option('--severity <level>', 'low, medium, or high', 'medium')
+  .action(async (opts) => {
+    try {
+      await submitReport({
+        kind: 'bug',
+        title: opts.title,
+        body: opts.body,
+        severity: opts.severity,
+      }, 'Bug report submitted');
+    } catch (err) {
+      console.error(chalk.red(`Bug report failed: ${friendlyError(err)}`));
+      if (program.opts().verbose) console.error(err);
+      process.exit(1);
+    }
+  });
+
+reportCmd
+  .command('feature')
+  .description('Submit a gsync feature request')
+  .requiredOption('--title <text>', 'short feature title')
+  .requiredOption('--body <text>', 'what you wanted to do, what was missing, and why it matters')
+  .action(async (opts) => {
+    try {
+      await submitReport({
+        kind: 'feature',
+        title: opts.title,
+        body: opts.body,
+      }, 'Feature request submitted');
+    } catch (err) {
+      console.error(chalk.red(`Feature request failed: ${friendlyError(err)}`));
+      if (program.opts().verbose) console.error(err);
+      process.exit(1);
+    }
+  });
+
+reportCmd
+  .command('list')
+  .description('List recent gsync bug reports and feature requests')
+  .option('--last <count>', 'number of reports to show', '20')
+  .action(async (opts) => {
+    try {
+      const { session } = await requireConfig();
+      const count = Number.parseInt(opts.last ?? '20', 10);
+      const reports = await getRecentReports(session.teamId, Number.isNaN(count) ? 20 : count);
+
+      if (reports.length === 0) {
+        console.log(chalk.yellow('No reports yet.'));
+        return;
+      }
+
+      console.log(chalk.cyan(`Reports (${reports.length}):`));
+      for (const report of reports) {
+        const when = report.createdAt ? formatRelativeTime(report.createdAt) : 'unknown';
+        const severity = report.severity ? ` · ${report.severity}` : '';
+        console.log(`  - [${report.kind}] ${report.title}${severity} — ${report.createdBySeatName || 'unknown'} · ${when}`);
+      }
+    } catch (err) {
+      console.error(chalk.red(`Report list failed: ${friendlyError(err)}`));
       if (program.opts().verbose) console.error(err);
       process.exit(1);
     }

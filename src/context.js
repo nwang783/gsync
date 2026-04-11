@@ -10,12 +10,14 @@ export function generateContext(twoWeek, threeDay, activePlans, recentPlans) {
 
   // 2-Week Goal
   lines.push('## 2-Week Goal');
-  lines.push(twoWeek?.content || '(not set)');
+  lines.push(twoWeek?.summary || '(not set)');
+  if (twoWeek?.planId) lines.push(`Plan: ${twoWeek.planId}`);
   lines.push('');
 
   // 3-Day Target
   lines.push('## 3-Day Target');
-  lines.push(threeDay?.content || '(not set)');
+  lines.push(threeDay?.summary || '(not set)');
+  if (threeDay?.planId) lines.push(`Plan: ${threeDay.planId}`);
   lines.push('');
 
   // Active Plans

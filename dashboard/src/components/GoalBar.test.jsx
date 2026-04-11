@@ -6,7 +6,6 @@ const snapshotHandlers = [];
 
 vi.mock('firebase/firestore', () => ({
   doc: (...parts) => ({ kind: 'doc', path: parts.join('/') }),
-  collection: (...parts) => ({ kind: 'collection', path: parts.join('/') }),
   onSnapshot: (ref, onNext) => {
     snapshotHandlers.push({ ref, onNext });
     return () => {};
@@ -25,38 +24,23 @@ describe('GoalBar', () => {
     cleanup();
   });
 
-  it('routes the 2-week goal card to the linked canonical plan when alignment matches', async () => {
+  it('opens the linked plan directly when planId is set on the meta doc', async () => {
     const onSelectPlan = vi.fn();
     render(<GoalBar teamId="team1" onSelectPlan={onSelectPlan} />);
 
     const twoWeekHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/meta/2week'));
     const threeDayHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/meta/3day'));
-    const plansHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/plans'));
 
     twoWeekHandler.onNext({
       exists: () => true,
       data: () => ({
-        content: 'Enable self-serve onboarding by April 22',
+        planId: 'plan-2w',
+        summary: 'Enable self-serve onboarding by April 22',
         updatedAt: new Date(),
         updatedBy: 'nathan-laptop',
       }),
     });
-    threeDayHandler.onNext({
-      exists: () => false,
-    });
-    plansHandler.onNext({
-      docs: [
-        {
-          id: 'plan-2w',
-          data: () => ({
-            slug: 'enable-self-serve',
-            summary: 'Enable creators to launch without manual help',
-            alignment: 'Establishes the 2-week goal by shipping the fastest path to first product',
-            updatedAt: new Date(),
-          }),
-        },
-      ],
-    });
+    threeDayHandler.onNext({ exists: () => false });
 
     await waitFor(() => expect(screen.getAllByRole('button', { name: /2-week goal/i })).toHaveLength(1));
     fireEvent.click(screen.getByRole('button', { name: /2-week goal/i }));
@@ -64,49 +48,72 @@ describe('GoalBar', () => {
     expect(onSelectPlan).toHaveBeenCalledWith('plan-2w');
   });
 
-  it('prefers the newest created goal-linked plan when multiple matches tie', async () => {
+  it('opens the inline detail modal when no planId is set', async () => {
     const onSelectPlan = vi.fn();
     render(<GoalBar teamId="team1" onSelectPlan={onSelectPlan} />);
 
     const twoWeekHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/meta/2week'));
-    const plansHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/plans'));
+    const threeDayHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/meta/3day'));
 
     twoWeekHandler.onNext({
       exists: () => true,
       data: () => ({
-        content: 'Ship the unified company memory timeline and keep reviewer context fresh',
+        summary: 'Enable self-serve onboarding by April 22',
         updatedAt: new Date(),
-        updatedBy: 'agent-admin',
+        updatedBy: 'nathan-laptop',
       }),
     });
-    plansHandler.onNext({
-      docs: [
-        {
-          id: 'older-plan',
-          data: () => ({
-            slug: 'older-plan',
-            summary: 'Older summary',
-            alignment: 'Establishes the 2-week goal by shipping the fastest path to first product',
-            createdAt: new Date('2026-04-11T10:00:00Z'),
-            updatedAt: new Date('2026-04-11T10:00:00Z'),
-          }),
-        },
-        {
-          id: 'newer-plan',
-          data: () => ({
-            slug: 'newer-plan',
-            summary: 'Newer summary',
-            alignment: 'Establishes the 2-week goal by shipping the fastest path to first product',
-            createdAt: new Date('2026-04-11T10:01:00Z'),
-            updatedAt: new Date('2026-04-11T10:00:00Z'),
-          }),
-        },
-      ],
+    threeDayHandler.onNext({ exists: () => false });
+
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /2-week goal/i })).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: /2-week goal/i }));
+
+    expect(onSelectPlan).not.toHaveBeenCalled();
+    const dialog = document.querySelector('.modal-content');
+    expect(dialog).not.toBeNull();
+    expect(dialog).toHaveTextContent('summary');
+    expect(dialog).toHaveTextContent('Enable self-serve onboarding by April 22');
+  });
+
+  it('shows "not set" when goal meta doc does not exist', async () => {
+    render(<GoalBar teamId="team1" onSelectPlan={vi.fn()} />);
+
+    const twoWeekHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/meta/2week'));
+    const threeDayHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/meta/3day'));
+
+    twoWeekHandler.onNext({ exists: () => false });
+    threeDayHandler.onNext({ exists: () => false });
+
+    await waitFor(() => expect(screen.getAllByText('not set')).toHaveLength(2));
+  });
+
+  it('modal label stays correct when Firestore re-pushes a new object reference', async () => {
+    const onSelectPlan = vi.fn();
+    render(<GoalBar teamId="team1" onSelectPlan={onSelectPlan} />);
+
+    const twoWeekHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/meta/2week'));
+    const threeDayHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/meta/3day'));
+
+    const goalData = () => ({
+      summary: 'Ship WebSocket layer',
+      updatedAt: new Date(),
+      updatedBy: 'nathan-laptop',
     });
+
+    twoWeekHandler.onNext({ exists: () => true, data: goalData });
+    threeDayHandler.onNext({ exists: () => false });
 
     await waitFor(() => expect(screen.getByRole('button', { name: /2-week goal/i })).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: /2-week goal/i }));
 
-    expect(onSelectPlan).toHaveBeenCalledWith('newer-plan');
+    // Simulate Firestore re-pushing a new object reference
+    twoWeekHandler.onNext({ exists: () => true, data: goalData });
+
+    await waitFor(() => {
+      const dialog = document.querySelector('.modal-content');
+      expect(dialog).not.toBeNull();
+      expect(dialog).toHaveTextContent('2-week goal');
+      expect(dialog).toHaveTextContent('Ship WebSocket layer');
+    });
   });
 });

@@ -44,7 +44,7 @@ function sendApiError(res, err, { fallbackMessage, status = 500 }) {
   return res.status(status).json({ error: fallbackMessage });
 }
 
-async function requireTeamAdmin(req, { adminClient = admin, dbClient = db } = {}) {
+async function requireTeamMember(req, { adminClient = admin, dbClient = db } = {}) {
   const authHeader = req.get("authorization") || "";
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!match) {
@@ -70,16 +70,38 @@ async function requireTeamAdmin(req, { adminClient = admin, dbClient = db } = {}
     throw err;
   }
 
-  if (membershipSnap.data().role !== "admin") {
+  const membership = membershipSnap.data();
+
+  return {
+    teamId,
+    seatId,
+    seatName: membership.seatName || decoded.name || seatId,
+    role: membership.role || "member",
+  };
+}
+
+async function requireScopedTeamMember(req, requestedTeamId, deps = {}) {
+  const auth = await requireTeamMember(req, deps);
+  if (requestedTeamId && requestedTeamId !== auth.teamId) {
+    const err = new Error("Seats can only submit reports for their own team");
+    err.status = 403;
+    throw err;
+  }
+  return auth;
+}
+
+async function requireTeamAdmin(req, deps = {}) {
+  const auth = await requireTeamMember(req, deps);
+  if (auth.role !== "admin") {
     const err = new Error("Only admins can create join codes");
     err.status = 403;
     throw err;
   }
 
   return {
-    teamId,
-    seatId,
-    seatName: membershipSnap.data().seatName || decoded.name || seatId,
+    teamId: auth.teamId,
+    seatId: auth.seatId,
+    seatName: auth.seatName,
   };
 }
 
@@ -124,6 +146,99 @@ async function issueJoinCodeForTeam({ dbClient = db, teamId, seatId, seatName })
     role: "member",
     createdBySeatId: seatId,
     createdBySeatName: seatName,
+  };
+}
+
+const VALID_REPORT_KINDS = new Set(["bug", "feature"]);
+const VALID_REPORT_SEVERITIES = new Set(["low", "medium", "high"]);
+
+function normalizeOptionalText(value) {
+  const text = String(value || "").trim();
+  return text || null;
+}
+
+function validateReportPayload(payload = {}) {
+  const kind = String(payload.kind || "").trim().toLowerCase();
+  const title = String(payload.title || "").trim();
+  const body = String(payload.body || "").trim();
+  const severityRaw = normalizeOptionalText(payload.severity);
+  const severity = severityRaw ? severityRaw.toLowerCase() : null;
+
+  if (!VALID_REPORT_KINDS.has(kind)) {
+    const err = new Error("Report kind must be `bug` or `feature`");
+    err.status = 400;
+    throw err;
+  }
+
+  if (!title) {
+    const err = new Error("Report title is required");
+    err.status = 400;
+    throw err;
+  }
+
+  if (!body) {
+    const err = new Error("Report body is required");
+    err.status = 400;
+    throw err;
+  }
+
+  if (title.length > 160) {
+    const err = new Error("Report title must be 160 characters or fewer");
+    err.status = 400;
+    throw err;
+  }
+
+  if (body.length > 4000) {
+    const err = new Error("Report body must be 4000 characters or fewer");
+    err.status = 400;
+    throw err;
+  }
+
+  if (severity && !VALID_REPORT_SEVERITIES.has(severity)) {
+    const err = new Error("Report severity must be low, medium, or high");
+    err.status = 400;
+    throw err;
+  }
+
+  return {
+    kind,
+    title,
+    body,
+    severity,
+  };
+}
+
+async function createTeamReport({
+  dbClient = db,
+  teamId,
+  seatId,
+  seatName,
+  role = "member",
+  source = "cli",
+  payload,
+}) {
+  const report = validateReportPayload(payload);
+  const reportRef = dbClient.doc(`teams/${teamId}/reports/${uuidv4()}`);
+
+  await reportRef.set({
+    kind: report.kind,
+    title: report.title,
+    body: report.body,
+    severity: report.severity,
+    source,
+    createdAt: FieldValue.serverTimestamp(),
+    createdBySeatId: seatId,
+    createdBySeatName: seatName,
+    createdByRole: role,
+  });
+
+  return {
+    id: reportRef.id,
+    ...report,
+    source,
+    createdBySeatId: seatId,
+    createdBySeatName: seatName,
+    createdByRole: role,
   };
 }
 
@@ -212,8 +327,8 @@ async function loadActivitySummarySource(teamId) {
   return buildActivitySummarySource({
     teamId,
     teamName,
-    twoWeekGoal: twoWeekSnap.exists ? twoWeekSnap.data().content || null : null,
-    threeDayGoal: threeDaySnap.exists ? threeDaySnap.data().content || null : null,
+    twoWeekGoal: twoWeekSnap.exists ? twoWeekSnap.data().summary || null : null,
+    threeDayGoal: threeDaySnap.exists ? threeDaySnap.data().summary || null : null,
     plans: plansSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
   });
 }
@@ -438,6 +553,30 @@ router.post("/agent/login", async (req, res) => {
   }
 });
 
+router.post("/teams/:teamId/reports", async (req, res) => {
+  try {
+    const requestedTeamId = req.params.teamId || null;
+    const auth = await requireScopedTeamMember(req, requestedTeamId);
+    const report = await createTeamReport({
+      dbClient: db,
+      teamId: auth.teamId,
+      seatId: auth.seatId,
+      seatName: auth.seatName,
+      role: auth.role,
+      source: "cli",
+      payload: req.body || {},
+    });
+
+    return res.status(201).json({
+      teamId: auth.teamId,
+      report,
+    });
+  } catch (err) {
+    console.error("POST /teams/:teamId/reports error:", err);
+    return sendApiError(res, err, { fallbackMessage: "Could not submit report" });
+  }
+});
+
 async function handleActivitySummaryRefresh(req, res) {
   try {
     const requestedTeamId = req.params.teamId || req.body.teamId || null;
@@ -483,8 +622,11 @@ exports.onTeamGoalWriteActivitySummary = functions.firestore
   });
 
 exports.api = functions.https.onRequest(app);
+module.exports.requireTeamMember = requireTeamMember;
+module.exports.requireScopedTeamMember = requireScopedTeamMember;
 module.exports.requireTeamAdmin = requireTeamAdmin;
 module.exports.requireScopedTeamAdmin = requireScopedTeamAdmin;
 module.exports.issueJoinCodeForTeam = issueJoinCodeForTeam;
 module.exports.joinTeamWithCode = joinTeamWithCode;
+module.exports.createTeamReport = createTeamReport;
 module.exports.refreshActivitySummary = refreshActivitySummary;

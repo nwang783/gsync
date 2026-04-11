@@ -48,8 +48,8 @@ It is designed to solve three problems:
 
 `gsync` creates a shared coordination loop:
 
-- the team sets a `2-week` goal for higher-level direction
-- the team sets a `3-day` target for short-term focus
+- the team sets a `2-week` goal by pushing a plan with `--goal 2week`
+- the team sets a `3-day` target by pushing a plan with `--goal 3day`
 - each person publishes active plans with summaries, ownership, touched surfaces, and status
 - teammates can pull and inspect each other's plans
 - agents can ingest synced context before generating new plans
@@ -129,8 +129,11 @@ gsync login --key <seat-key>
 gsync sync --last 20
 cat ~/.gsync/CONTEXT.md
 gsync memory reviewer-context   # compiled memory bundle; fails closed if sync is stale
+gsync report bug --title "Login copy is confusing" --body "The error did not tell me whether the seat key or network was wrong."
 gsync plan pull <id>              # only if a summary looks relevant
 gsync plan push my-plan.md        # create or update canonical plan
+gsync plan push my-plan.md --goal 3day   # push plan and set as 3-day target
+gsync plan push my-plan.md --goal 2week  # push plan and set as 2-week goal
 gsync plan update <id> --note "milestone or blocker"
 gsync plan review <id> --pr https://github.com/org/repo/pull/123
 gsync plan merged <id>
@@ -158,3 +161,15 @@ Key behavior:
 - Memories are append-only markdown entries; older entries stay visible in the dashboard and compiled reviewer context.
 - `gsync sync` recompiles the compiled memory bundle.
 - If memory changes after your last sync, `gsync memory reviewer-context` fails closed until you sync again.
+
+## Product Feedback
+
+gsync also has a built-in feedback queue for bugs and feature requests about gsync itself. This is not meant to replace your main GitHub issue tracker; it is an in-product inbox for early product feedback while the coordination workflow is still evolving.
+
+```bash
+gsync report bug --title "Join flow is unclear" --body "I expected the CLI to tell me whether the join code expired or was mistyped." --severity medium
+gsync report feature --title "Show plan diffs" --body "I want to compare plan revisions before pulling the latest markdown."
+gsync report list
+```
+
+The dashboard exposes the same queue in the `reports` tab so the team has one internal source of truth for product feedback coming from active use.
