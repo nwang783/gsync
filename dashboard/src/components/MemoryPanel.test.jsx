@@ -1,11 +1,12 @@
 import '@testing-library/jest-dom/vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { vi, describe, it, beforeEach, expect } from 'vitest';
 
 const snapshotHandlers = [];
 
 vi.mock('firebase/firestore', () => ({
   doc: (...parts) => ({ path: parts.join('/') }),
+  collection: (...parts) => ({ path: parts.join('/') }),
   onSnapshot: (_ref, onNext) => {
     snapshotHandlers.push(onNext);
     return () => {};
@@ -50,8 +51,67 @@ describe('MemoryPanel', () => {
     expect(screen.getByRole('button', { name: /^decisions$/i })).toBeInTheDocument();
     expect(screen.getByText(/open drafts/i)).toBeInTheDocument();
     expect(screen.getByText(/project lighthouse/i)).toBeInTheDocument();
-    expect(screen.getByText(/^1$/)).toBeInTheDocument();
     expect(screen.getByText(/fresh/i)).toBeInTheDocument();
+  });
+
+  it('shows multiple company briefs instead of replacing the previous one', async () => {
+    const { container } = render(<MemoryPanel teamId="team1" />);
+    const panel = within(container);
+
+    snapshotHandlers[0]({
+      exists: () => true,
+      data: () => ({
+        approved: {
+          companyBrief: { title: 'Latest Company Brief', count: 2 },
+          projectBrief: { title: 'Project Lighthouse', count: 1 },
+          decisionCount: 0,
+          companyBriefCount: 2,
+          projectBriefCount: 1,
+        },
+        drafts: [],
+        status: {
+          compiledState: 'fresh',
+          compiledAt: new Date(),
+        },
+      }),
+    });
+
+    snapshotHandlers[1]({
+      docs: [
+        {
+          id: 'm1',
+          data: () => ({
+            kind: 'companyBrief',
+            title: 'Company North Star',
+            content: '# North Star\n\nKeep the company aligned.',
+            approvedAt: new Date('2026-04-01T12:00:00Z'),
+          }),
+        },
+        {
+          id: 'm2',
+          data: () => ({
+            kind: 'companyBrief',
+            title: 'Company Operating Principles',
+            content: '# Principles\n\nShip the complete thing.',
+            approvedAt: new Date('2026-04-02T12:00:00Z'),
+          }),
+        },
+      ],
+    });
+
+    snapshotHandlers[2]({ exists: () => false });
+    snapshotHandlers[3]({ exists: () => false });
+    snapshotHandlers[4]({ exists: () => false, data: () => ({ entries: [] }) });
+
+    await waitFor(() => expect(panel.getByRole('button', { name: /^company briefs$/i })).toBeInTheDocument());
+    fireEvent.click(panel.getByRole('button', { name: /^company briefs$/i }));
+
+    await waitFor(() => {
+      expect(panel.getByText(/Company North Star/i)).toBeInTheDocument();
+      expect(panel.getByText(/Company Operating Principles/i)).toBeInTheDocument();
+      expect(panel.getByText(/Keep the company aligned/i)).toBeInTheDocument();
+      expect(panel.getByText(/Ship the complete thing/i)).toBeInTheDocument();
+    });
   });
 
   it('marks the compiled context pack as needing sync after memory changes', async () => {

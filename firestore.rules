@@ -28,6 +28,10 @@ service cloud.firestore {
         allow read, write: if teamMember(teamId);
       }
 
+      match /memoryEntries/{entryId} {
+        allow read, write: if teamMember(teamId);
+      }
+
       match /memory/conversationDrafts/items/{draftId} {
         allow read, write: if teamMember(teamId);
       }

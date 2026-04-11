@@ -156,6 +156,7 @@ gsync memory reviewer-context
 Key behavior:
 
 - `memory draft` is planning evidence, not durable memory.
-- `memory approve` promotes a draft into `companyBrief`, `projectBrief`, or `decisionLog`.
+- `memory approve` appends a draft into the company brief repository, the project brief repository, or the decision log.
+- Company and project briefs are append-only markdown entries; older briefs stay visible in the dashboard and compiled reviewer context.
 - `gsync sync` recompiles the approved-memory bundle.
 - If approved memory changes after your last sync, `gsync memory reviewer-context` fails closed until you sync again.

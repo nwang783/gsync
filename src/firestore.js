@@ -76,8 +76,46 @@ function memoryDoc(teamId, docId) {
   return doc(getDb(), 'teams', teamId, 'memory', docId);
 }
 
+function memoryEntriesCol(teamId) {
+  return collection(getDb(), 'teams', teamId, 'memoryEntries');
+}
+
 function conversationDraftsCol(teamId) {
   return collection(getDb(), 'teams', teamId, 'memory', 'conversationDrafts', 'items');
+}
+
+function memoryEntryFromData(entry, kind, idPrefix) {
+  if (!entry?.content) return null;
+  return {
+    id: `${idPrefix}`,
+    kind,
+    title: entry.title || (kind === 'companyBrief' ? 'Company brief' : 'Project brief'),
+    content: entry.content,
+    approvedAt: entry.approvedAt || null,
+    approvedBy: entry.approvedBy || null,
+    sourceDraftId: entry.sourceDraftId || null,
+    createdAt: entry.createdAt || null,
+    createdBy: entry.createdBy || null,
+  };
+}
+
+function sortMemoryEntries(entries) {
+  return [...entries].sort((left, right) => {
+    const leftTime = timestampToMillis(left.approvedAt ?? left.createdAt);
+    const rightTime = timestampToMillis(right.approvedAt ?? right.createdAt);
+    if (leftTime !== rightTime) return leftTime - rightTime;
+    return String(left.title || '').localeCompare(String(right.title || ''));
+  });
+}
+
+function timestampToMillis(timestamp) {
+  if (!timestamp) return 0;
+  if (typeof timestamp.toMillis === 'function') return timestamp.toMillis();
+  if (typeof timestamp.toDate === 'function') return timestamp.toDate().getTime();
+  if (timestamp instanceof Date) return timestamp.getTime();
+  if (typeof timestamp.seconds === 'number') return timestamp.seconds * 1000;
+  const parsed = new Date(timestamp);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
 }
 
 export async function getMemoryState(teamId) {
@@ -137,20 +175,26 @@ export async function promoteConversationDraft(teamId, draftId, { target, titleO
     const nextRevision = Number(state.revision || 0) + 1;
 
     if (target === 'companyBrief') {
-      transaction.set(memoryDoc(teamId, 'companyBrief'), {
+      transaction.set(doc(memoryEntriesCol(teamId)), {
+        kind: 'companyBrief',
         content: draft.body,
         title: titleOverride || draft.title || 'Company brief',
         approvedAt: serverTimestamp(),
         approvedBy: userName,
         sourceDraftId: draftId,
+        createdAt: serverTimestamp(),
+        createdBy: userName,
       });
     } else if (target === 'projectBrief') {
-      transaction.set(memoryDoc(teamId, 'projectBrief'), {
+      transaction.set(doc(memoryEntriesCol(teamId)), {
+        kind: 'projectBrief',
         content: draft.body,
         title: titleOverride || draft.title || 'Project brief',
         approvedAt: serverTimestamp(),
         approvedBy: userName,
         sourceDraftId: draftId,
+        createdAt: serverTimestamp(),
+        createdBy: userName,
       });
     } else if (target === 'decisionLog') {
       transaction.set(memoryDoc(teamId, 'decisionLog'), {
@@ -219,24 +263,38 @@ export async function saveCompiledContextPack(teamId, pack, userName) {
 }
 
 export async function getApprovedMemory(teamId) {
-  const [companyBriefSnap, projectBriefSnap, decisionLogSnap, state] = await Promise.all([
+  const [entriesSnap, legacyCompanySnap, legacyProjectSnap, decisionLogSnap, state] = await Promise.all([
+    getDocs(query(memoryEntriesCol(teamId), orderBy('approvedAt', 'asc'))),
     getDoc(memoryDoc(teamId, 'companyBrief')),
     getDoc(memoryDoc(teamId, 'projectBrief')),
     getDoc(memoryDoc(teamId, 'decisionLog')),
     getMemoryState(teamId),
   ]);
 
+  const entries = entriesSnap.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+  const companyBriefs = sortMemoryEntries([
+    ...entries.filter((entry) => entry.kind === 'companyBrief'),
+    ...(legacyCompanySnap.exists() ? [memoryEntryFromData(legacyCompanySnap.data(), 'companyBrief', 'legacy-companyBrief')] : []),
+  ].filter(Boolean));
+  const projectBriefs = sortMemoryEntries([
+    ...entries.filter((entry) => entry.kind === 'projectBrief'),
+    ...(legacyProjectSnap.exists() ? [memoryEntryFromData(legacyProjectSnap.data(), 'projectBrief', 'legacy-projectBrief')] : []),
+  ].filter(Boolean));
+
   return {
     revision: Number(state.revision || 0),
     latestMemoryUpdatedAt: state.latestMemoryUpdatedAt || null,
-    companyBrief: companyBriefSnap.exists() ? companyBriefSnap.data() : null,
-    projectBrief: projectBriefSnap.exists() ? projectBriefSnap.data() : null,
+    companyBriefs,
+    projectBriefs,
+    companyBrief: companyBriefs.at(-1) || null,
+    projectBrief: projectBriefs.at(-1) || null,
     decisionLog: decisionLogSnap.exists() ? decisionLogSnap.data() : { entries: [] },
   };
 }
 
 async function updateMemorySummary(teamId) {
-  const [companyBrief, projectBrief, decisionLog, state, compiled, draftSnap] = await Promise.all([
+  const [memoryEntriesSnap, legacyCompanySnap, legacyProjectSnap, decisionLog, state, compiled, draftSnap] = await Promise.all([
+    getDocs(query(memoryEntriesCol(teamId), orderBy('approvedAt', 'asc'))),
     getDoc(memoryDoc(teamId, 'companyBrief')),
     getDoc(memoryDoc(teamId, 'projectBrief')),
     getDoc(memoryDoc(teamId, 'decisionLog')),
@@ -245,6 +303,17 @@ async function updateMemorySummary(teamId) {
     getDocs(query(conversationDraftsCol(teamId), orderBy('updatedAt', 'desc'))),
   ]);
 
+  const memoryEntries = memoryEntriesSnap.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
+  const companyBriefs = sortMemoryEntries([
+    ...memoryEntries.filter((entry) => entry.kind === 'companyBrief'),
+    ...(legacyCompanySnap.exists() ? [memoryEntryFromData(legacyCompanySnap.data(), 'companyBrief', 'legacy-companyBrief')] : []),
+  ].filter(Boolean));
+  const projectBriefs = sortMemoryEntries([
+    ...memoryEntries.filter((entry) => entry.kind === 'projectBrief'),
+    ...(legacyProjectSnap.exists() ? [memoryEntryFromData(legacyProjectSnap.data(), 'projectBrief', 'legacy-projectBrief')] : []),
+  ].filter(Boolean));
+  const latestCompanyBrief = companyBriefs.at(-1) || null;
+  const latestProjectBrief = projectBriefs.at(-1) || null;
   const drafts = draftSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const draftCount = drafts.filter((item) => item.state === 'draft').length;
   const stateRevision = Number(state.revision || 0);
@@ -256,14 +325,18 @@ async function updateMemorySummary(teamId) {
 
   await setDoc(memoryDoc(teamId, 'summary'), {
     approved: {
-      companyBrief: companyBrief.exists() ? {
-        title: companyBrief.data().title || 'Company brief',
-        approvedAt: companyBrief.data().approvedAt || null,
+      companyBrief: latestCompanyBrief ? {
+        title: latestCompanyBrief.title || 'Company brief',
+        approvedAt: latestCompanyBrief.approvedAt || null,
+        count: companyBriefs.length,
       } : null,
-      projectBrief: projectBrief.exists() ? {
-        title: projectBrief.data().title || 'Project brief',
-        approvedAt: projectBrief.data().approvedAt || null,
+      projectBrief: latestProjectBrief ? {
+        title: latestProjectBrief.title || 'Project brief',
+        approvedAt: latestProjectBrief.approvedAt || null,
+        count: projectBriefs.length,
       } : null,
+      companyBriefCount: companyBriefs.length,
+      projectBriefCount: projectBriefs.length,
       decisionCount: Array.isArray(decisionLog.data()?.entries) ? decisionLog.data().entries.length : 0,
     },
     drafts: drafts.map((item) => ({
@@ -393,11 +466,19 @@ export async function updatePlanNote(teamId, planId, note, userName) {
   });
 }
 
-const VALID_TRANSITIONS = {
+export const VALID_PLAN_STATUS_TRANSITIONS = {
+  proposed: ['review', 'abandoned'],
+  draft: ['in-progress', 'review', 'abandoned'],
   'in-progress': ['review', 'abandoned'],
   review: ['merged', 'abandoned'],
   merged: ['abandoned'],
 };
+
+export function isValidPlanStatusTransition(currentStatus, nextStatus) {
+  if (nextStatus === 'abandoned') return true;
+  const allowed = VALID_PLAN_STATUS_TRANSITIONS[currentStatus];
+  return Boolean(allowed && allowed.includes(nextStatus));
+}
 
 export async function updatePlanStatus(teamId, planId, status, extraFields = {}) {
   const ref = doc(getDb(), 'teams', teamId, 'plans', planId);
@@ -405,13 +486,11 @@ export async function updatePlanStatus(teamId, planId, status, extraFields = {})
     const snap = await transaction.get(ref);
     if (!snap.exists()) throw new Error(`Plan ${planId} not found.`);
     const currentStatus = snap.data().status;
-    if (status !== 'abandoned') {
-      const allowed = VALID_TRANSITIONS[currentStatus];
-      if (!allowed || !allowed.includes(status)) {
-        throw new Error(
-          `Invalid status transition: ${currentStatus} → ${status}. Allowed: ${(allowed || []).join(', ') || 'none'}`
-        );
-      }
+    if (!isValidPlanStatusTransition(currentStatus, status)) {
+      const allowed = VALID_PLAN_STATUS_TRANSITIONS[currentStatus];
+      throw new Error(
+        `Invalid status transition: ${currentStatus} → ${status}. Allowed: ${(allowed || []).join(', ') || 'none'}`
+      );
     }
     transaction.update(ref, { status, updatedAt: serverTimestamp(), ...extraFields });
   });
