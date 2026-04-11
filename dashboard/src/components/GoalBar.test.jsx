@@ -69,7 +69,10 @@ describe('GoalBar', () => {
     fireEvent.click(screen.getByRole('button', { name: /2-week goal/i }));
 
     expect(onSelectPlan).not.toHaveBeenCalled();
-    expect(screen.getByText('Enable self-serve onboarding by April 22')).toBeInTheDocument();
+    const dialog = document.querySelector('.modal-content');
+    expect(dialog).not.toBeNull();
+    expect(dialog).toHaveTextContent('summary');
+    expect(dialog).toHaveTextContent('Enable self-serve onboarding by April 22');
   });
 
   it('shows "not set" when goal meta doc does not exist', async () => {
@@ -106,6 +109,11 @@ describe('GoalBar', () => {
     // Simulate Firestore re-pushing a new object reference
     twoWeekHandler.onNext({ exists: () => true, data: goalData });
 
-    await waitFor(() => expect(screen.getByText('2-week goal')).toBeInTheDocument());
+    await waitFor(() => {
+      const dialog = document.querySelector('.modal-content');
+      expect(dialog).not.toBeNull();
+      expect(dialog).toHaveTextContent('2-week goal');
+      expect(dialog).toHaveTextContent('Ship WebSocket layer');
+    });
   });
 });
