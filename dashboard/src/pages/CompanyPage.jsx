@@ -3,9 +3,9 @@ import JoinCodePanel from '../components/JoinCodePanel.jsx';
 
 export default function CompanyPage({ teamId, role, user, seatName }) {
   return (
-    <>
-      <MemoryPanel teamId={teamId} />
-      <JoinCodePanel teamId={teamId} role={role} user={user} seatName={seatName} />
-    </>
+    <MemoryPanel
+      teamId={teamId}
+      headerRight={<JoinCodePanel role={role} user={user} />}
+    />
   );
 }

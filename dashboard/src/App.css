@@ -781,10 +781,10 @@ body::before {
 
 /* Memory accordion */
 .memory-accordion-entry {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  margin-bottom: 6px;
-  padding: 0 12px;
+  border-bottom: 1px solid rgba(192, 180, 158, 0.3);
+}
+.memory-accordion-entry:last-child {
+  border-bottom: none;
 }
 .memory-accordion-header {
   display: flex;
