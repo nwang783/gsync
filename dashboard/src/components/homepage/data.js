@@ -11,7 +11,7 @@ export const HERO_FACTS = [
   },
   {
     label: 'seat auth',
-    value: 'One durable seat key works in the CLI and the dashboard.',
+    value: 'Seat keys keep returning users signed in, while join codes onboard new teammates in the CLI or dashboard.',
   },
   {
     label: 'planning split',

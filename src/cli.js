@@ -658,9 +658,9 @@ async function apiPost(config, endpoint, body) {
   return res.json();
 }
 
-async function apiPostWithFallback(config, endpoint, body) {
+async function apiPostWithFallback(config, endpoint, body, { authToken } = {}) {
   try {
-    const data = await apiPost(config, endpoint, body);
+    const data = await apiPostWithHeaders(config, endpoint, body, authToken);
     return { data, config, fellBackToHosted: false };
   } catch (err) {
     const hostedConfig = getDefaultConfig();
@@ -669,10 +669,39 @@ async function apiPostWithFallback(config, endpoint, body) {
     }
 
     verbose(`Onboarding request failed against local backend (${config.apiBaseUrl}). Retrying hosted backend (${hostedConfig.apiBaseUrl}).`);
-    const data = await apiPost(hostedConfig, endpoint, body);
+    const data = await apiPostWithHeaders(hostedConfig, endpoint, body, authToken);
     saveConfig(hostedConfig);
     return { data, config: hostedConfig, fellBackToHosted: true };
   }
+}
+
+async function apiPostWithHeaders(config, endpoint, body, authToken) {
+  const url = `${config.apiBaseUrl}${endpoint}`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API error ${res.status}: ${text || res.statusText}`);
+  }
+  return res.json();
+}
+
+async function getCurrentFirebaseIdToken() {
+  const { getAuth } = await import('firebase/auth');
+  const auth = getAuth();
+  if (!auth.currentUser) {
+    throw new Error('Firebase auth is not ready. Run `gsync login` again.');
+  }
+  return auth.currentUser.getIdToken();
 }
 
 async function firebaseSignIn(config, customToken) {
@@ -771,6 +800,44 @@ program
       console.log(chalk.white.bold(`  ${data.seatKey}`));
     } catch (err) {
       console.error(chalk.red(`Join failed: ${friendlyError(err)}`));
+      if (program.opts().verbose) console.error(err);
+      process.exit(1);
+    }
+  });
+
+// --- gsync join-code ---
+program
+  .command('join-code')
+  .description('Create join codes for teammates')
+  .command('create')
+  .description('Create a fresh join code for the current team')
+  .action(async (opts) => {
+    try {
+      const { session, config } = await requireConfig();
+      if ((session.role || '').toLowerCase() !== 'admin') {
+        throw new Error('Only admins can create join codes.');
+      }
+
+      const authToken = await getCurrentFirebaseIdToken();
+      const { data, config: activeConfig, fellBackToHosted } = await apiPostWithFallback(
+        config,
+        '/join-codes',
+        {},
+        { authToken },
+      );
+
+      saveConfig(activeConfig);
+
+      console.log(chalk.green('✓ Join code created!'));
+      if (fellBackToHosted) {
+        console.log(chalk.yellow(`  Switched onboarding to hosted backend: ${activeConfig.apiBaseUrl}`));
+      }
+      console.log(chalk.cyan(`  Team ID: ${data.teamId}`));
+      console.log(chalk.cyan(`  Join code: ${data.joinCode}`));
+      console.log(chalk.cyan(`  Role: ${data.role}`));
+      console.log(chalk.cyan('  Share this code with a teammate so they join the same team.'));
+    } catch (err) {
+      console.error(chalk.red(`Join-code create failed: ${friendlyError(err)}`));
       if (program.opts().verbose) console.error(err);
       process.exit(1);
     }

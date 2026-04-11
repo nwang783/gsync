@@ -59,6 +59,11 @@ Open `http://127.0.0.1:5173` after seeding. The dashboard should show:
 - planning evidence
 - a sample active plan
 
+## Manual Verification
+
+Whenever you make a change, include a concrete manual verification path in your update for your human to be able to test the changes himself.
+For local onboarding work, prefer `npm run dev:creds` after `npm run dev:up` so you can test with a seeded db, the admin seat key, the peer seat key, and the join code from `./.dev/seed.json`. Get all the info the human will need to verify the changes and provide it to him in your response.
+
 ## Notes for agents
 
 - Keep all sandbox work inside `./.dev/`.

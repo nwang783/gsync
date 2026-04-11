@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 const NAV_ITEMS = [
   { id: 'overview', label: 'overview', icon: '~' },
+  { id: 'company', label: 'company', icon: '◈' },
   { id: 'me', label: 'me', icon: '>' },
 ];
 

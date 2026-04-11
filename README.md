@@ -14,7 +14,7 @@ Today the project includes:
 - a shared plan model with summary metadata plus canonical markdown bodies
 - an approval-gated company memory layer with a compiled reviewer context pack
 - a local sync step that generates agent-readable summary context files
-- a dashboard for team visibility
+- a dashboard for team visibility and team onboarding
 
 The published CLI is intended to work without local source code or a manual `gsync init` step. By default it bootstraps itself against the hosted `nomergeconflicts` Firebase project. If you are self-hosting or testing a different environment, override those defaults with `GSYNC_API_BASE_URL`, `GSYNC_FIREBASE_PROJECT_ID`, and `GSYNC_FIREBASE_API_KEY`, or run `gsync init`.
 
@@ -124,6 +124,7 @@ The intended happy-path command sequence for an agent is:
 ```bash
 gsync signup --team claw-social --seat-name nathan-laptop
 gsync join --code XXXX-XXXX-XXXX --seat-name teammate-mbp
+gsync join-code create         # admin-only: mint a fresh teammate invite
 gsync login --key <seat-key>
 gsync sync --last 20
 cat ~/.gsync/CONTEXT.md
@@ -134,6 +135,8 @@ gsync plan update <id> --note "milestone or blocker"
 gsync plan review <id> --pr https://github.com/org/repo/pull/123
 gsync plan merged <id>
 ```
+
+Humans can also join from the dashboard login page with the same join code and a seat name. Use `gsync login --key <seat-key>` for returning seats, and `gsync join --code <join-code> --seat-name <name>` for new seats.
 
 ## Approval-Gated Memory
 

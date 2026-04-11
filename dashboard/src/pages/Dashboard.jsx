@@ -5,10 +5,17 @@ import GoalBar from '../components/GoalBar.jsx';
 import TeamColumns from '../components/TeamColumns.jsx';
 import UpdateFeed from '../components/UpdateFeed.jsx';
 import PlanDetail from '../components/PlanDetail.jsx';
-import MemoryPanel from '../components/MemoryPanel.jsx';
+import CompanyPage from './CompanyPage.jsx';
+
+const PAGE_TITLES = {
+  overview: '# overview',
+  company: '# company',
+  me: '# me',
+  activity: '# activity',
+};
 
 export default function Dashboard() {
-  const { teamId, role, seatName, logout, loading } = useAuth();
+  const { user, teamId, role, seatName, logout, loading } = useAuth();
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [activePage, setActivePage] = useState('overview');
 
@@ -27,19 +34,24 @@ export default function Dashboard() {
 
       <main className="app-main">
         <div className="app-header">
-          <h1>{activePage === 'overview' ? '# overview' : activePage === 'me' ? '# me' : '# activity'}</h1>
+          <h1>{PAGE_TITLES[activePage] ?? '# overview'}</h1>
         </div>
 
         {activePage === 'overview' && (
           <>
             <GoalBar teamId={teamId} onSelectPlan={setSelectedPlanId} />
-            <MemoryPanel teamId={teamId} />
-            <UpdateFeed teamId={teamId} />
-            <section className="overview-history-section">
+            <div className="overview-section">
+              <UpdateFeed teamId={teamId} />
+            </div>
+            <div className="overview-section">
               <h2>## individual histories</h2>
               <TeamColumns teamId={teamId} onSelectPlan={setSelectedPlanId} />
-            </section>
+            </div>
           </>
+        )}
+
+        {activePage === 'company' && (
+          <CompanyPage teamId={teamId} role={role} user={user} seatName={seatName} />
         )}
 
         {activePage === 'me' && (
@@ -57,9 +69,7 @@ export default function Dashboard() {
         )}
 
         {activePage === 'activity' && (
-          <>
-            <UpdateFeed teamId={teamId} />
-          </>
+          <UpdateFeed teamId={teamId} />
         )}
 
         {selectedPlanId && (

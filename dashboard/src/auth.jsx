@@ -51,6 +51,14 @@ export function AuthProvider({ children }) {
     return unsub;
   }, []);
 
+  const completeLogin = async (data) => {
+    await signInWithCustomToken(auth, data.firebaseToken);
+    setTeamId(data.teamId);
+    setRole(data.role);
+    setSeatName(data.seatName || null);
+    return data;
+  };
+
   const login = async (seatKey) => {
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
     const res = await fetch(`${apiBaseUrl}/agent/login`, {
@@ -62,12 +70,23 @@ export function AuthProvider({ children }) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'Login failed');
     }
+      const data = await res.json();
+    return completeLogin(data);
+  };
+
+  const joinTeam = async (joinCode, seatName) => {
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+    const res = await fetch(`${apiBaseUrl}/teams/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ joinCode, seatName }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Join failed');
+    }
     const data = await res.json();
-    await signInWithCustomToken(auth, data.firebaseToken);
-    setTeamId(data.teamId);
-    setRole(data.role);
-    setSeatName(data.seatName || null);
-    return data;
+    return completeLogin(data);
   };
 
   const logout = async () => {
@@ -75,7 +94,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, teamId, role, seatName, login, logout, loading: user === undefined || (Boolean(user) && !claimsReady) }}>
+    <AuthContext.Provider value={{ user, teamId, role, seatName, login, joinTeam, logout, loading: user === undefined || (Boolean(user) && !claimsReady) }}>
       {children}
     </AuthContext.Provider>
   );

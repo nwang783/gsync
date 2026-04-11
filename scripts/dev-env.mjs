@@ -287,6 +287,53 @@ function extractPlanId(output) {
   return match[1];
 }
 
+function loadSeed() {
+  if (!fs.existsSync(DEV_SEED_FILE)) return null;
+  return JSON.parse(fs.readFileSync(DEV_SEED_FILE, 'utf8'));
+}
+
+async function showTestCreds() {
+  ensureDevDirs();
+
+  let seed = loadSeed();
+  if (!seed) {
+    await seedDevData();
+    seed = loadSeed();
+  }
+
+  if (!seed) {
+    throw new Error('Local seed file could not be created.');
+  }
+
+  const validation = await fetch(`${API_BASE_URL}/agent/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ seatKey: seed.adminSeatKey }),
+  }).then(async (response) => {
+    if (response.ok) return { ok: true };
+    return { ok: false, status: response.status, body: await response.text() };
+  }).catch((error) => ({ ok: false, error: error.message }));
+
+  if (!validation.ok) {
+    console.log('Existing sandbox creds were stale, reseeding local data...');
+    await seedDevData();
+    seed = loadSeed();
+  }
+
+  console.log('');
+  console.log('Local test credentials:');
+  console.log(`  Team ID: ${seed.teamId}`);
+  console.log(`  Dashboard: ${seed.dashboardUrl || DASHBOARD_URL}`);
+  console.log(`  Admin seat key: ${seed.adminSeatKey}`);
+  console.log(`  Peer seat key: ${seed.peerSeatKey}`);
+  console.log(`  Join code: ${seed.joinCode}`);
+  console.log('');
+  console.log('Manual verification paths:');
+  console.log(`  1. Open ${seed.dashboardUrl || DASHBOARD_URL} and sign in with the admin seat key.`);
+  console.log(`  2. Use the "Join a team with a code" form with the join code and the peer seat name.`);
+  console.log(`  3. Run ${process.execPath} bin/gsync.js join --code ${seed.joinCode} --seat-name teammate-mbp with HOME=${seed.devHome || DEV_HOME}.`);
+}
+
 async function seedDevData() {
   ensureDevDirs();
   await waitForServices();
@@ -445,6 +492,9 @@ async function main() {
     case 'smoke':
       await smokeTest();
       break;
+    case 'creds':
+      await showTestCreds();
+      break;
     case 'status':
       showStatus();
       break;
@@ -459,6 +509,7 @@ async function main() {
         '  node scripts/dev-env.mjs reset',
         '  node scripts/dev-env.mjs seed',
         '  node scripts/dev-env.mjs smoke',
+        '  node scripts/dev-env.mjs creds',
         '  node scripts/dev-env.mjs status',
         '  node scripts/dev-env.mjs cli <gsync args...>',
       ].join('\n'));
