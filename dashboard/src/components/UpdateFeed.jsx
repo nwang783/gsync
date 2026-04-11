@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { relativeTime, toDate } from '../utils.js';
+import ActivitySummary from './ActivitySummary.jsx';
 
 export default function UpdateFeed({ teamId, onSelectPlan = null }) {
   const [plans, setPlans] = useState([]);
@@ -68,6 +69,16 @@ export default function UpdateFeed({ teamId, onSelectPlan = null }) {
   const display = events.slice(0, visibleCount);
   const hasMore = events.length > display.length;
 
+  const stats = useMemo(() => {
+    const now = Date.now();
+    const DAY = 86400000;
+    const createdToday = plans.filter(p => toDate(p.createdAt) > now - DAY).length;
+    const active = plans.filter(p => ['proposed', 'draft', 'in-progress', 'review'].includes(p.status)).length;
+    const merged = plans.filter(p => p.status === 'merged').length;
+    const contributors = new Set(plans.map(p => p.author).filter(Boolean)).size;
+    return { createdToday, active, merged, contributors };
+  }, [plans]);
+
   if (loading) {
     return (
       <div className="update-feed">
@@ -98,6 +109,16 @@ export default function UpdateFeed({ teamId, onSelectPlan = null }) {
   return (
     <div className="update-feed">
       <h2>## activity</h2>
+
+      <div className="activity-stats">
+        <span className="stat-chip"><strong>{stats.active}</strong> active</span>
+        <span className="stat-chip"><strong>{stats.merged}</strong> merged</span>
+        <span className="stat-chip"><strong>{stats.createdToday}</strong> new today</span>
+        <span className="stat-chip"><strong>{stats.contributors}</strong> contributor{stats.contributors !== 1 ? 's' : ''}</span>
+      </div>
+
+      <ActivitySummary teamId={teamId} />
+
       <div className="feed-list">
         {display.map((ev, i) => (
           <button key={i} type="button" className="feed-item" onClick={() => onSelectPlan && onSelectPlan(ev.planId)}>
@@ -106,7 +127,6 @@ export default function UpdateFeed({ teamId, onSelectPlan = null }) {
               <span className="feed-author">{ev.author}</span>{' '}
               <span className="feed-action">{ev.action}</span>{' '}
               <span className="feed-slug">{ev.slug}</span>
-              {ev.note && <span className="feed-note"> -- {ev.note}</span>}
             </span>
           </button>
         ))}

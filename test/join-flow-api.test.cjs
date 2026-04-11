@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { sha256 } = require('../functions/join-codes');
 const {
   requireTeamAdmin,
+  requireScopedTeamAdmin,
   issueJoinCodeForTeam,
   joinTeamWithCode,
 } = require('../functions/index.js');
@@ -153,6 +154,18 @@ test('requireTeamAdmin rejects non-admin seats', async () => {
   await assert.rejects(
     () => requireTeamAdmin(req, { adminClient: createAdminClient(), dbClient: db }),
     /Only admins can create join codes/,
+  );
+});
+
+test('requireScopedTeamAdmin rejects refreshing a different team', async () => {
+  const db = createMemoryDb({
+    'teams/team-1/memberships/seat-admin': { role: 'admin', seatName: 'Admin Seat' },
+  });
+  const req = { get: () => 'Bearer token-admin' };
+
+  await assert.rejects(
+    () => requireScopedTeamAdmin(req, 'team-2', { adminClient: createAdminClient(), dbClient: db }),
+    /Admins can only refresh insights for their own team/,
   );
 });
 

@@ -54,6 +54,11 @@ service cloud.firestore {
         }
       }
 
+      match /insights/{insightId} {
+        allow read: if teamMember(teamId);
+        allow write: if false;
+      }
+
       match /memberships/{seatId} {
         allow read: if teamMember(teamId);
         allow write: if false;

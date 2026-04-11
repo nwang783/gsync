@@ -16,6 +16,14 @@ export default function PlanDetail({ planId, teamId, onClose }) {
   const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
+    setPlan(null);
+    setContent(null);
+    setContentError(null);
+    setContentLoading(true);
+    setLoading(true);
+    setError(null);
+    setFullscreen(false);
+
     const unsub = onSnapshot(
       doc(db, 'teams', teamId, 'plans', planId),
       (snap) => {
@@ -52,15 +60,7 @@ export default function PlanDetail({ planId, teamId, onClose }) {
     return () => { cancelled = true; };
   }, [teamId, planId]);
 
-  if (loading) {
-    return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-          <div className="empty-state">Loading plan...</div>
-        </div>
-      </div>
-    );
-  }
+  const isSwitchingPlans = Boolean(plan && plan.id !== planId);
 
   if (error) {
     return (
@@ -68,6 +68,16 @@ export default function PlanDetail({ planId, teamId, onClose }) {
         <div className="modal-content" onClick={(e) => e.stopPropagation()}>
           <div className="error-banner" style={{ color: '#fff', background: '#e53e3e', padding: '8px 12px', borderRadius: '4px' }}>{error}</div>
           <button className="modal-close" onClick={onClose}>x</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading || isSwitchingPlans) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="empty-state">Loading plan...</div>
         </div>
       </div>
     );

@@ -2,6 +2,7 @@ node_modules/
 dashboard/node_modules/
 dashboard/dist/
 .env
+.env.local
 dashboard/.env
 .agents
 .DS_Store

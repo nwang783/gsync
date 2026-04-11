@@ -1,10 +1,32 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
+const fs = require("node:fs");
+const path = require("node:path");
 const express = require("express");
 const cors = require("cors");
 const { v4: uuidv4 } = require("uuid");
+const dotenv = require("dotenv");
 const { generateJoinCode, sha256 } = require("./join-codes");
+const {
+  FEATURE_KEY: ACTIVITY_SUMMARY_FEATURE_KEY,
+  buildActivitySummaryDocument,
+  buildActivitySummaryErrorDocument,
+  buildActivitySummaryFingerprint,
+  buildActivitySummarySource,
+  generateActivitySummary,
+} = require("./insights/activity-summary.cjs");
+
+for (const candidate of [
+  path.join(__dirname, ".env"),
+  path.join(__dirname, ".env.local"),
+  path.join(__dirname, "..", ".env"),
+  path.join(__dirname, "..", ".env.local"),
+]) {
+  if (fs.existsSync(candidate)) {
+    dotenv.config({ path: candidate, override: false });
+  }
+}
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -59,6 +81,16 @@ async function requireTeamAdmin(req, { adminClient = admin, dbClient = db } = {}
     seatId,
     seatName: membershipSnap.data().seatName || decoded.name || seatId,
   };
+}
+
+async function requireScopedTeamAdmin(req, requestedTeamId, deps = {}) {
+  const auth = await requireTeamAdmin(req, deps);
+  if (requestedTeamId && requestedTeamId !== auth.teamId) {
+    const err = new Error("Admins can only refresh insights for their own team");
+    err.status = 403;
+    throw err;
+  }
+  return auth;
 }
 
 function createJoinCodeDoc(dbClient, batch, teamId, { seatId, seatName }) {
@@ -166,6 +198,82 @@ async function joinTeamWithCode({ dbClient = db, adminClient = admin, joinCode, 
     seatKey: result.seatKey,
     firebaseToken,
   };
+}
+
+async function loadActivitySummarySource(teamId) {
+  const [teamSnap, twoWeekSnap, threeDaySnap, plansSnap] = await Promise.all([
+    db.doc(`teams/${teamId}`).get(),
+    db.doc(`teams/${teamId}/meta/2week`).get(),
+    db.doc(`teams/${teamId}/meta/3day`).get(),
+    db.collection(`teams/${teamId}/plans`).get(),
+  ]);
+
+  const teamName = teamSnap.exists ? teamSnap.data().name || null : null;
+  return buildActivitySummarySource({
+    teamId,
+    teamName,
+    twoWeekGoal: twoWeekSnap.exists ? twoWeekSnap.data().content || null : null,
+    threeDayGoal: threeDaySnap.exists ? threeDaySnap.data().content || null : null,
+    plans: plansSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+  });
+}
+
+async function refreshActivitySummary(teamId) {
+  const summaryRef = db.doc(`teams/${teamId}/insights/${ACTIVITY_SUMMARY_FEATURE_KEY}`);
+  const previousSnap = await summaryRef.get();
+  const previous = previousSnap.exists ? previousSnap.data() : null;
+
+  const source = await loadActivitySummarySource(teamId);
+  const sourceFingerprint = buildActivitySummaryFingerprint(source);
+
+  if (previous?.sourceFingerprint === sourceFingerprint && previous?.status === 'ready') {
+    return { refreshed: false, skipped: true, reason: 'source unchanged', sourceFingerprint };
+  }
+
+  let generated;
+  try {
+    generated = await generateActivitySummary({ source });
+  } catch (error) {
+    console.error(`[activity-summary] generation failed team=${teamId}:`, error);
+    const errorDoc = buildActivitySummaryErrorDocument({
+      teamId,
+      source,
+      error,
+      sourceFingerprint,
+      previousDocument: previous,
+    });
+    await summaryRef.set(errorDoc, { merge: true });
+    throw error;
+  }
+
+  const latestSource = await loadActivitySummarySource(teamId);
+  const latestFingerprint = buildActivitySummaryFingerprint(latestSource);
+  if (latestFingerprint !== sourceFingerprint) {
+    return { refreshed: false, skipped: true, reason: 'source changed during generation', sourceFingerprint };
+  }
+
+  const currentSnap = await summaryRef.get();
+  const currentGeneratedAt = currentSnap.exists ? Date.parse(currentSnap.data().generatedAt || '') : NaN;
+  const previousGeneratedAt = previous ? Date.parse(previous.generatedAt || '') : NaN;
+  if (
+    Number.isFinite(currentGeneratedAt)
+    && Number.isFinite(previousGeneratedAt)
+    && currentGeneratedAt > previousGeneratedAt
+    && (currentSnap.data().sourceFingerprint || null) !== sourceFingerprint
+  ) {
+    return { refreshed: false, skipped: true, reason: 'a newer summary already exists', sourceFingerprint };
+  }
+
+  const docData = buildActivitySummaryDocument({
+    teamId,
+    source: latestSource,
+    model: generated.model,
+    output: generated.output,
+    sourceFingerprint,
+    previousDocument: previous,
+  });
+  await summaryRef.set(docData, { merge: true });
+  return { refreshed: true, skipped: false, sourceFingerprint, model: generated.model };
 }
 
 // ---------------------------------------------------------------------------
@@ -330,12 +438,53 @@ router.post("/agent/login", async (req, res) => {
   }
 });
 
+async function handleActivitySummaryRefresh(req, res) {
+  try {
+    const requestedTeamId = req.params.teamId || req.body.teamId || null;
+    const { teamId } = await requireScopedTeamAdmin(req, requestedTeamId);
+
+    const result = await refreshActivitySummary(teamId);
+    return res.status(200).json({ teamId, featureKey: ACTIVITY_SUMMARY_FEATURE_KEY, ...result });
+  } catch (err) {
+    console.error("refreshActivitySummary error:", err);
+    return sendApiError(res, err, { fallbackMessage: "Could not refresh activity summary" });
+  }
+}
+
+router.post("/teams/:teamId/insights/activity-summary/refresh", handleActivitySummaryRefresh);
+router.post("/insights/activity-summary/refresh", handleActivitySummaryRefresh);
+
 // Support both direct function URLs (`/agent/login`) and Hosting rewrites that
 // preserve the `/api` prefix (`/api/agent/login`).
 app.use(router);
 app.use("/api", router);
 
+exports.onPlanWriteActivitySummary = functions.firestore
+  .document("teams/{teamId}/plans/{planId}")
+  .onWrite(async (_change, context) => {
+    const { teamId } = context.params;
+    try {
+      await refreshActivitySummary(teamId);
+    } catch (err) {
+      console.error(`Activity summary refresh failed for team ${teamId}:`, err);
+    }
+  });
+
+exports.onTeamGoalWriteActivitySummary = functions.firestore
+  .document("teams/{teamId}/meta/{docId}")
+  .onWrite(async (_change, context) => {
+    const { teamId, docId } = context.params;
+    if (!['2week', '3day'].includes(docId)) return;
+    try {
+      await refreshActivitySummary(teamId);
+    } catch (err) {
+      console.error(`Activity summary refresh failed for team ${teamId} meta ${docId}:`, err);
+    }
+  });
+
 exports.api = functions.https.onRequest(app);
 module.exports.requireTeamAdmin = requireTeamAdmin;
+module.exports.requireScopedTeamAdmin = requireScopedTeamAdmin;
 module.exports.issueJoinCodeForTeam = issueJoinCodeForTeam;
 module.exports.joinTeamWithCode = joinTeamWithCode;
+module.exports.refreshActivitySummary = refreshActivitySummary;

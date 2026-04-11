@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi, describe, it, beforeEach, expect } from 'vitest';
 
 const snapshotHandlers = [];
@@ -22,6 +22,7 @@ import GoalBar from './GoalBar.jsx';
 describe('GoalBar', () => {
   beforeEach(() => {
     snapshotHandlers.length = 0;
+    cleanup();
   });
 
   it('routes the 2-week goal card to the linked canonical plan when alignment matches', async () => {
@@ -57,9 +58,55 @@ describe('GoalBar', () => {
       ],
     });
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /2-week goal/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /2-week goal/i })).toHaveLength(1));
     fireEvent.click(screen.getByRole('button', { name: /2-week goal/i }));
 
     expect(onSelectPlan).toHaveBeenCalledWith('plan-2w');
+  });
+
+  it('prefers the newest created goal-linked plan when multiple matches tie', async () => {
+    const onSelectPlan = vi.fn();
+    render(<GoalBar teamId="team1" onSelectPlan={onSelectPlan} />);
+
+    const twoWeekHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/meta/2week'));
+    const plansHandler = snapshotHandlers.find((entry) => entry.ref.path.includes('/plans'));
+
+    twoWeekHandler.onNext({
+      exists: () => true,
+      data: () => ({
+        content: 'Ship the unified company memory timeline and keep reviewer context fresh',
+        updatedAt: new Date(),
+        updatedBy: 'agent-admin',
+      }),
+    });
+    plansHandler.onNext({
+      docs: [
+        {
+          id: 'older-plan',
+          data: () => ({
+            slug: 'older-plan',
+            summary: 'Older summary',
+            alignment: 'Establishes the 2-week goal by shipping the fastest path to first product',
+            createdAt: new Date('2026-04-11T10:00:00Z'),
+            updatedAt: new Date('2026-04-11T10:00:00Z'),
+          }),
+        },
+        {
+          id: 'newer-plan',
+          data: () => ({
+            slug: 'newer-plan',
+            summary: 'Newer summary',
+            alignment: 'Establishes the 2-week goal by shipping the fastest path to first product',
+            createdAt: new Date('2026-04-11T10:01:00Z'),
+            updatedAt: new Date('2026-04-11T10:00:00Z'),
+          }),
+        },
+      ],
+    });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /2-week goal/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /2-week goal/i }));
+
+    expect(onSelectPlan).toHaveBeenCalledWith('newer-plan');
   });
 });
