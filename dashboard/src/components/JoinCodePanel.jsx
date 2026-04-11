@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export default function JoinCodePanel({ teamId, role, user, seatName }) {
+export default function JoinCodePanel({ role, user }) {
   const [joinCode, setJoinCode] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -12,9 +12,7 @@ export default function JoinCodePanel({ teamId, role, user, seatName }) {
     return () => clearTimeout(timer);
   }, [copied]);
 
-  if ((role || '').toLowerCase() !== 'admin') {
-    return null;
-  }
+  if ((role || '').toLowerCase() !== 'admin') return null;
 
   const createJoinCode = async () => {
     setLoading(true);
@@ -49,42 +47,31 @@ export default function JoinCodePanel({ teamId, role, user, seatName }) {
       await navigator.clipboard.writeText(joinCode);
       setCopied(true);
     } catch {
-      setError('Could not copy the join code to the clipboard.');
+      setError('Could not copy to clipboard.');
     }
   };
 
   return (
-    <section className="join-code-panel" aria-label="team onboarding">
-      <div className="join-code-panel__header">
-        <div>
-          <h2>## team onboarding</h2>
-          <p>Generate a fresh join code so another teammate can join the same team.</p>
-        </div>
-        <button type="button" className="hp-btn hp-btn--primary" onClick={createJoinCode} disabled={loading || !user}>
-          {loading ? 'creating...' : 'Create join code'}
-        </button>
-      </div>
-
-      {error && <div className="error-banner join-code-panel__error">{error}</div>}
-
+    <div className="join-code-widget">
       {joinCode ? (
-        <div className="join-code-panel__result">
-          <div className="join-code-panel__label">share this code</div>
-          <div className="join-code-panel__code-row">
-            <code className="join-code-panel__code">{joinCode}</code>
-            <button type="button" className="hp-btn hp-btn--secondary join-code-panel__copy" onClick={copyJoinCode}>
-              {copied ? 'copied' : 'copy'}
-            </button>
-          </div>
-          <div className="join-code-panel__meta">
-            {seatName ? `${seatName} created this code` : 'This admin created the code'} · teammates who use it will join team {teamId}
-          </div>
+        <div className="join-code-widget__code-row">
+          <span className="join-code-widget__label">join code</span>
+          <code className="join-code-widget__code">{joinCode}</code>
+          <button type="button" className="join-code-widget__copy" onClick={copyJoinCode}>
+            {copied ? 'copied!' : 'copy'}
+          </button>
         </div>
       ) : (
-        <div className="join-code-panel__empty">
-          No active code generated yet. Create one when you are ready to onboard someone.
-        </div>
+        <button
+          type="button"
+          className="join-code-widget__create"
+          onClick={createJoinCode}
+          disabled={loading || !user}
+        >
+          {loading ? 'creating...' : '+ invite teammate'}
+        </button>
       )}
-    </section>
+      {error && <div className="join-code-widget__error">{error}</div>}
+    </div>
   );
 }

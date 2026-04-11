@@ -6,7 +6,6 @@ import {
   terminate,
   doc,
   collection,
-  addDoc,
   getDoc,
   setDoc,
   updateDoc,
@@ -76,7 +75,11 @@ function memoryDoc(teamId, docId) {
   return doc(getDb(), 'teams', teamId, 'memory', docId);
 }
 
-function memoryEntriesCol(teamId) {
+function memoriesCol(teamId) {
+  return collection(getDb(), 'teams', teamId, 'memories');
+}
+
+function legacyMemoryEntriesCol(teamId) {
   return collection(getDb(), 'teams', teamId, 'memoryEntries');
 }
 
@@ -84,25 +87,120 @@ function conversationDraftsCol(teamId) {
   return collection(getDb(), 'teams', teamId, 'memory', 'conversationDrafts', 'items');
 }
 
-function memoryEntryFromData(entry, kind, idPrefix) {
-  if (!entry?.content) return null;
+function memoryTimestamp(entry) {
+  return entry?.createdAt
+    ?? entry?.updatedAt
+    ?? entry?.approvedAt
+    ?? entry?.decidedAt
+    ?? null;
+}
+
+function memoryEntryFromData(entry, { id, titleFallback = 'Memory', source = 'legacy' } = {}) {
+  const content = entry?.content ?? entry?.body ?? entry?.detail ?? entry?.summary ?? '';
+  if (!String(content || '').trim()) return null;
   return {
-    id: `${idPrefix}`,
-    kind,
-    title: entry.title || (kind === 'companyBrief' ? 'Company brief' : 'Project brief'),
-    content: entry.content,
-    approvedAt: entry.approvedAt || null,
-    approvedBy: entry.approvedBy || null,
-    sourceDraftId: entry.sourceDraftId || null,
-    createdAt: entry.createdAt || null,
-    createdBy: entry.createdBy || null,
+    id,
+    source,
+    title: entry.title || entry.summary || titleFallback,
+    content,
+    tags: Array.isArray(entry.tags) ? entry.tags : [],
+    createdAt: memoryTimestamp(entry),
+    createdBy: entry.createdBy || entry.approvedBy || entry.decidedBy || null,
+    updatedAt: entry.updatedAt || entry.approvedAt || entry.decidedAt || null,
+    updatedBy: entry.updatedBy || entry.approvedBy || entry.decidedBy || null,
+  };
+}
+
+function buildNewMemoryEntries(snapshot) {
+  return snapshot.docs.map((entry) => ({ id: entry.id, source: 'memories', ...entry.data() }));
+}
+
+function buildLegacyMemoryEntries(legacyEntriesSnap, legacyCompanySnap, legacyProjectSnap, decisionLogSnap) {
+  return [
+    ...legacyEntriesSnap.docs.map((entry) => memoryEntryFromData(entry.data(), {
+      id: `legacy-memoryEntries-${entry.id}`,
+      titleFallback: 'Memory',
+      source: 'legacy-memoryEntries',
+    })).filter(Boolean),
+    ...(legacyCompanySnap.exists() ? [memoryEntryFromData(legacyCompanySnap.data(), {
+      id: 'legacy-companyBrief',
+      titleFallback: 'Company brief',
+      source: 'legacy-companyBrief',
+    })] : []).filter(Boolean),
+    ...(legacyProjectSnap.exists() ? [memoryEntryFromData(legacyProjectSnap.data(), {
+      id: 'legacy-projectBrief',
+      titleFallback: 'Project brief',
+      source: 'legacy-projectBrief',
+    })] : []).filter(Boolean),
+    ...(decisionLogSnap.exists() && Array.isArray(decisionLogSnap.data()?.entries)
+      ? decisionLogSnap.data().entries.map((entry, index) => memoryEntryFromData(entry, {
+        id: `legacy-decisionLog-${index}`,
+        titleFallback: 'Decision',
+        source: 'legacy-decisionLog',
+      })).filter(Boolean)
+      : []),
+  ].filter(Boolean);
+}
+
+function memoryEntrySignature(entry) {
+  const title = String(entry?.title || '').trim().toLowerCase();
+  const content = String(entry?.content || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const tags = Array.isArray(entry?.tags)
+    ? [...new Set(entry.tags.map((tag) => String(tag || '').trim().toLowerCase()).filter(Boolean))].sort().join('|')
+    : '';
+  const timestamp = memoryTimestamp(entry);
+  const dayKey = timestamp ? new Date(timestampToMillis(timestamp)).toISOString().slice(0, 10) : '';
+  return [title, content, tags, dayKey].join('::');
+}
+
+export function mergeMemoryEntries(...entryGroups) {
+  const merged = new Map();
+
+  for (const group of entryGroups) {
+    for (const entry of group.filter(Boolean)) {
+      const key = memoryEntrySignature(entry);
+      const existing = merged.get(key);
+      if (!existing || (existing.source?.startsWith('legacy-') && entry.source === 'memories')) {
+        merged.set(key, entry);
+      }
+    }
+  }
+
+  return sortMemoryEntries([...merged.values()]);
+}
+
+async function loadUnifiedMemoryEntries(teamId) {
+  const [memoriesSnap, legacyEntriesSnap, legacyCompanySnap, legacyProjectSnap, decisionLogSnap, state] = await Promise.all([
+    getDocs(query(memoriesCol(teamId), orderBy('createdAt', 'asc'))),
+    getDocs(query(legacyMemoryEntriesCol(teamId), orderBy('approvedAt', 'asc'))),
+    getDoc(memoryDoc(teamId, 'companyBrief')),
+    getDoc(memoryDoc(teamId, 'projectBrief')),
+    getDoc(memoryDoc(teamId, 'decisionLog')),
+    getMemoryState(teamId),
+  ]);
+
+  const newMemories = buildNewMemoryEntries(memoriesSnap);
+  const legacyMemories = buildLegacyMemoryEntries(
+    legacyEntriesSnap,
+    legacyCompanySnap,
+    legacyProjectSnap,
+    decisionLogSnap,
+  );
+  const memories = mergeMemoryEntries(newMemories, legacyMemories);
+
+  return {
+    revision: Number(state.revision || 0),
+    latestMemoryUpdatedAt: state.latestMemoryUpdatedAt || null,
+    memories,
+    latestMemory: memories.at(-1) || null,
+    memoryCount: memories.length,
   };
 }
 
 function sortMemoryEntries(entries) {
   return [...entries].sort((left, right) => {
-    const leftTime = timestampToMillis(left.approvedAt ?? left.createdAt);
-    const rightTime = timestampToMillis(right.approvedAt ?? right.createdAt);
+    const leftTime = timestampToMillis(memoryTimestamp(left));
+    const rightTime = timestampToMillis(memoryTimestamp(right));
     if (leftTime !== rightTime) return leftTime - rightTime;
     return String(left.title || '').localeCompare(String(right.title || ''));
   });
@@ -136,89 +234,24 @@ export async function getCompiledContextPack(teamId) {
   return snap.data();
 }
 
-export async function createConversationDraft(teamId, { title, body, tags = [] }, userName) {
-  const ref = await addDoc(conversationDraftsCol(teamId), {
-    title,
-    body,
-    tags,
-    state: 'draft',
-    createdAt: serverTimestamp(),
-    createdBy: userName,
-    updatedAt: serverTimestamp(),
-    updatedBy: userName,
-    approvedAt: null,
-    approvedBy: null,
-    promotedTo: null,
-  });
-
-  await updateMemorySummary(teamId);
-  return ref.id;
-}
-
-export async function promoteConversationDraft(teamId, draftId, { target, titleOverride = null }, userName) {
-  const draftRef = doc(conversationDraftsCol(teamId), draftId);
+export async function createMemoryEntry(teamId, { title, body, tags = [] }, userName) {
+  const stateRef = memoryDoc(teamId, 'state');
+  const memoryRef = doc(memoriesCol(teamId));
 
   await runTransaction(getDb(), async (transaction) => {
-    const draftSnap = await transaction.get(draftRef);
-    if (!draftSnap.exists()) {
-      throw new Error(`Conversation draft ${draftId} not found.`);
-    }
-
-    const draft = draftSnap.data();
-    if (draft.state !== 'draft') {
-      throw new Error(`Conversation draft ${draftId} is already ${draft.state}.`);
-    }
-
-    const stateRef = memoryDoc(teamId, 'state');
     const stateSnap = await transaction.get(stateRef);
     const state = stateSnap.exists() ? stateSnap.data() : { revision: 0 };
     const nextRevision = Number(state.revision || 0) + 1;
 
-    if (target === 'companyBrief') {
-      transaction.set(doc(memoryEntriesCol(teamId)), {
-        kind: 'companyBrief',
-        content: draft.body,
-        title: titleOverride || draft.title || 'Company brief',
-        approvedAt: serverTimestamp(),
-        approvedBy: userName,
-        sourceDraftId: draftId,
-        createdAt: serverTimestamp(),
-        createdBy: userName,
-      });
-    } else if (target === 'projectBrief') {
-      transaction.set(doc(memoryEntriesCol(teamId)), {
-        kind: 'projectBrief',
-        content: draft.body,
-        title: titleOverride || draft.title || 'Project brief',
-        approvedAt: serverTimestamp(),
-        approvedBy: userName,
-        sourceDraftId: draftId,
-        createdAt: serverTimestamp(),
-        createdBy: userName,
-      });
-    } else if (target === 'decisionLog') {
-      transaction.set(memoryDoc(teamId, 'decisionLog'), {
-        entries: arrayUnion({
-          summary: titleOverride || draft.title || 'Decision',
-          detail: draft.body,
-          sourceDraftId: draftId,
-          decidedAt: new Date().toISOString().slice(0, 10),
-          decidedBy: userName,
-        }),
-        updatedAt: serverTimestamp(),
-        updatedBy: userName,
-      }, { merge: true });
-    } else {
-      throw new Error(`Unsupported promotion target: ${target}`);
-    }
-
-    transaction.update(draftRef, {
-      state: 'approved',
-      approvedAt: serverTimestamp(),
-      approvedBy: userName,
-      promotedTo: target,
+    transaction.set(memoryRef, {
+      title,
+      content: body,
+      tags,
+      createdAt: serverTimestamp(),
+      createdBy: userName,
       updatedAt: serverTimestamp(),
       updatedBy: userName,
+      source: 'direct',
     });
 
     transaction.set(stateRef, {
@@ -231,6 +264,7 @@ export async function promoteConversationDraft(teamId, draftId, { target, titleO
   });
 
   await updateMemorySummary(teamId);
+  return memoryRef.id;
 }
 
 export async function saveCompiledContextPack(teamId, pack, userName) {
@@ -241,7 +275,7 @@ export async function saveCompiledContextPack(teamId, pack, userName) {
     const currentRevision = Number(state.revision || 0);
     const compiledRevision = Number(pack.memoryRevision || 0);
     if (currentRevision !== compiledRevision) {
-      throw new Error('Approved memory changed during sync. Run `gsync sync` again to refresh reviewer context.');
+      throw new Error('Memory changed during sync. Run `gsync sync` again to refresh reviewer context.');
     }
 
     transaction.set(memoryDoc(teamId, 'compiledContext'), {
@@ -262,93 +296,63 @@ export async function saveCompiledContextPack(teamId, pack, userName) {
   await updateMemorySummary(teamId);
 }
 
-export async function getApprovedMemory(teamId) {
-  const [entriesSnap, legacyCompanySnap, legacyProjectSnap, decisionLogSnap, state] = await Promise.all([
-    getDocs(query(memoryEntriesCol(teamId), orderBy('approvedAt', 'asc'))),
-    getDoc(memoryDoc(teamId, 'companyBrief')),
-    getDoc(memoryDoc(teamId, 'projectBrief')),
-    getDoc(memoryDoc(teamId, 'decisionLog')),
-    getMemoryState(teamId),
-  ]);
-
-  const entries = entriesSnap.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
-  const companyBriefs = sortMemoryEntries([
-    ...entries.filter((entry) => entry.kind === 'companyBrief'),
-    ...(legacyCompanySnap.exists() ? [memoryEntryFromData(legacyCompanySnap.data(), 'companyBrief', 'legacy-companyBrief')] : []),
-  ].filter(Boolean));
-  const projectBriefs = sortMemoryEntries([
-    ...entries.filter((entry) => entry.kind === 'projectBrief'),
-    ...(legacyProjectSnap.exists() ? [memoryEntryFromData(legacyProjectSnap.data(), 'projectBrief', 'legacy-projectBrief')] : []),
-  ].filter(Boolean));
+export async function getMemoryTimeline(teamId) {
+  const unified = await loadUnifiedMemoryEntries(teamId);
 
   return {
-    revision: Number(state.revision || 0),
-    latestMemoryUpdatedAt: state.latestMemoryUpdatedAt || null,
-    companyBriefs,
-    projectBriefs,
-    companyBrief: companyBriefs.at(-1) || null,
-    projectBrief: projectBriefs.at(-1) || null,
-    decisionLog: decisionLogSnap.exists() ? decisionLogSnap.data() : { entries: [] },
+    revision: unified.revision,
+    latestMemoryUpdatedAt: unified.latestMemoryUpdatedAt,
+    memories: unified.memories,
+    latestMemory: unified.latestMemory,
+    memoryCount: unified.memoryCount,
   };
 }
 
+export const getApprovedMemory = getMemoryTimeline;
+
 async function updateMemorySummary(teamId) {
-  const [memoryEntriesSnap, legacyCompanySnap, legacyProjectSnap, decisionLog, state, compiled, draftSnap] = await Promise.all([
-    getDocs(query(memoryEntriesCol(teamId), orderBy('approvedAt', 'asc'))),
-    getDoc(memoryDoc(teamId, 'companyBrief')),
-    getDoc(memoryDoc(teamId, 'projectBrief')),
-    getDoc(memoryDoc(teamId, 'decisionLog')),
+  const [state, compiled, unified] = await Promise.all([
     getMemoryState(teamId),
     getCompiledContextPack(teamId),
-    getDocs(query(conversationDraftsCol(teamId), orderBy('updatedAt', 'desc'))),
+    loadUnifiedMemoryEntries(teamId),
   ]);
 
-  const memoryEntries = memoryEntriesSnap.docs.map((entry) => ({ id: entry.id, ...entry.data() }));
-  const companyBriefs = sortMemoryEntries([
-    ...memoryEntries.filter((entry) => entry.kind === 'companyBrief'),
-    ...(legacyCompanySnap.exists() ? [memoryEntryFromData(legacyCompanySnap.data(), 'companyBrief', 'legacy-companyBrief')] : []),
-  ].filter(Boolean));
-  const projectBriefs = sortMemoryEntries([
-    ...memoryEntries.filter((entry) => entry.kind === 'projectBrief'),
-    ...(legacyProjectSnap.exists() ? [memoryEntryFromData(legacyProjectSnap.data(), 'projectBrief', 'legacy-projectBrief')] : []),
-  ].filter(Boolean));
-  const latestCompanyBrief = companyBriefs.at(-1) || null;
-  const latestProjectBrief = projectBriefs.at(-1) || null;
-  const drafts = draftSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  const draftCount = drafts.filter((item) => item.state === 'draft').length;
-  const stateRevision = Number(state.revision || 0);
+  const memories = unified.memories;
+  const stateRevision = unified.revision;
   const compiledRevision = compiled?.memoryRevision == null ? null : Number(compiled.memoryRevision || 0);
   const compiledAt = state.compiledAt || compiled?.compiledAt || null;
-  const latestMemoryUpdatedAt = state.latestMemoryUpdatedAt || null;
+  const latestMemoryUpdatedAt = unified.latestMemoryUpdatedAt || state.latestMemoryUpdatedAt || null;
   const syncRequired = state.compiledState === 'needs-sync'
     || (compiledRevision == null ? stateRevision > 0 : compiledRevision !== stateRevision);
+  const latestMemory = memories.at(-1) || null;
+  const recentMemories = memories.slice(-10).map((entry) => ({
+    id: entry.id,
+    title: entry.title || 'Untitled',
+    content: entry.content || '',
+    tags: Array.isArray(entry.tags) ? entry.tags : [],
+    createdAt: entry.createdAt || null,
+    createdBy: entry.createdBy || null,
+    updatedAt: entry.updatedAt || null,
+    updatedBy: entry.updatedBy || null,
+    source: entry.source || null,
+  }));
 
   await setDoc(memoryDoc(teamId, 'summary'), {
-    approved: {
-      companyBrief: latestCompanyBrief ? {
-        title: latestCompanyBrief.title || 'Company brief',
-        approvedAt: latestCompanyBrief.approvedAt || null,
-        count: companyBriefs.length,
+    memories: {
+      count: memories.length,
+      latest: latestMemory ? {
+        id: latestMemory.id,
+        title: latestMemory.title || 'Untitled',
+        createdAt: latestMemory.createdAt || null,
+        createdBy: latestMemory.createdBy || null,
+        updatedAt: latestMemory.updatedAt || null,
+        updatedBy: latestMemory.updatedBy || null,
+        source: latestMemory.source || null,
       } : null,
-      projectBrief: latestProjectBrief ? {
-        title: latestProjectBrief.title || 'Project brief',
-        approvedAt: latestProjectBrief.approvedAt || null,
-        count: projectBriefs.length,
-      } : null,
-      companyBriefCount: companyBriefs.length,
-      projectBriefCount: projectBriefs.length,
-      decisionCount: Array.isArray(decisionLog.data()?.entries) ? decisionLog.data().entries.length : 0,
+      recent: recentMemories,
     },
-    drafts: drafts.map((item) => ({
-      id: item.id,
-      title: item.title || '(untitled draft)',
-      state: item.state || 'draft',
-      promotedTo: item.promotedTo || null,
-      updatedAt: item.updatedAt || null,
-      createdBy: item.createdBy || 'unknown',
-    })),
     status: {
-      draftCount,
+      memoryCount: memories.length,
       memoryRevision: stateRevision,
       compiledState: state.compiledState || compiled?.state || 'missing',
       compiledAt,

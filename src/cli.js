@@ -5,7 +5,7 @@ import path from 'path';
 
 import { fileURLToPath } from 'url';
 import { loadConfig, saveConfig, loadSession, saveSession, clearSession, ensureDirs, PLANS_DIR, CONFIG_FILE, CONTEXT_FILE, INDEX_FILE, SKILL_FILE, getDefaultConfig, hasConfigFile } from './config.js';
-import { initFirebase, cleanup, getTeamMeta, setTeamMeta, getPlanContent, getPlanSummary, getRecentPlans, updatePlanNote, updatePlanStatus, getActivePlans, upsertPlanContent, createConversationDraft, promoteConversationDraft, getApprovedMemory, saveCompiledContextPack, getCompiledContextPack, getMemoryState } from './firestore.js';
+import { initFirebase, cleanup, getTeamMeta, setTeamMeta, getPlanContent, getPlanSummary, getRecentPlans, updatePlanNote, updatePlanStatus, getActivePlans, upsertPlanContent, createMemoryEntry, getMemoryTimeline, saveCompiledContextPack, getCompiledContextPack, getMemoryState } from './firestore.js';
 import { buildSyncContextContent, assertReviewerContextReady } from './context.js';
 import { formatPlanSummary, formatPlanSummaryDetail, formatRelativeTime, parseDuration } from './format.js';
 import { buildPulledPlanFile, normalizeTouches, parsePlanFile } from './plan-file.js';
@@ -229,12 +229,12 @@ program
       const recentCount = Number.parseInt(opts.last ?? '20', 10);
 
       verbose('Fetching data from Firestore...');
-      const [twoWeek, threeDay, activePlans, recentPlans, approvedMemory] = await Promise.all([
+      const [twoWeek, threeDay, activePlans, recentPlans, memoryTimeline] = await Promise.all([
         getTeamMeta(session.teamId, '2week'),
         getTeamMeta(session.teamId, '3day'),
         getActivePlans(session.teamId),
         getRecentPlans(session.teamId, Number.isNaN(recentCount) ? 20 : recentCount),
-        getApprovedMemory(session.teamId),
+        getMemoryTimeline(session.teamId),
       ]);
 
       const { contextContent, compiledPack } = buildSyncContextContent({
@@ -242,7 +242,7 @@ program
         threeDay,
         activePlans,
         recentPlans,
-        memory: approvedMemory,
+        memory: memoryTimeline,
       });
       await saveCompiledContextPack(session.teamId, compiledPack, session.seatName);
 
@@ -255,10 +255,10 @@ program
           activePlans,
           recentPlans,
           memory: {
-            revision: approvedMemory.revision || 0,
+            revision: memoryTimeline.revision || 0,
             compiledState: compiledPack.state,
             compiledAt: compiledPack.compiledAt,
-            latestMemoryUpdatedAt: approvedMemory.latestMemoryUpdatedAt || null,
+            latestMemoryUpdatedAt: memoryTimeline.latestMemoryUpdatedAt || null,
           },
         }, null, 2) + '\n',
         'utf-8',
@@ -487,51 +487,50 @@ goalsCmd
 // --- gsync memory ---
 const memoryCmd = program
   .command('memory')
-  .description('Manage approval-gated company memory');
+  .description('Manage company memories');
+
+async function addMemoryEntry(opts) {
+  const { session } = await requireConfig();
+  const tags = String(opts.tags || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const memoryId = await createMemoryEntry(session.teamId, {
+    title: opts.title,
+    body: opts.body,
+    tags,
+  }, session.seatName);
+  console.log(chalk.green(`✓ Memory added: ${memoryId}`));
+  console.log(chalk.cyan('  Run `gsync sync` to refresh the compiled context with the latest memory.'));
+}
 
 memoryCmd
-  .command('draft')
-  .description('Create a planning conversation draft (evidence only)')
-  .requiredOption('--title <text>', 'draft title')
-  .requiredOption('--body <text>', 'draft body text')
-  .option('--tags <csv>', 'comma-separated draft tags', '')
+  .command('add')
+  .description('Append a new company memory to the timeline')
+  .requiredOption('--title <text>', 'memory title')
+  .requiredOption('--body <text>', 'memory body text')
+  .option('--tags <csv>', 'comma-separated memory tags', '')
   .action(async (opts) => {
     try {
-      const { session } = await requireConfig();
-      const tags = String(opts.tags || '')
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
-      const draftId = await createConversationDraft(session.teamId, {
-        title: opts.title,
-        body: opts.body,
-        tags,
-      }, session.seatName);
-      console.log(chalk.green(`✓ Conversation draft created: ${draftId}`));
-      console.log(chalk.cyan('  State: draft (not approved memory yet)'));
+      await addMemoryEntry(opts);
     } catch (err) {
-      console.error(chalk.red(`Memory draft failed: ${friendlyError(err)}`));
+      console.error(chalk.red(`Memory add failed: ${friendlyError(err)}`));
       if (program.opts().verbose) console.error(err);
       process.exit(1);
     }
   });
 
 memoryCmd
-  .command('approve <draftId>')
-  .description('Promote a draft into approved memory')
-  .requiredOption('--to <target>', 'promotion target: companyBrief | projectBrief | decisionLog')
-  .option('--title <text>', 'optional approved title override')
-  .action(async (draftId, opts) => {
+  .command('push')
+  .description('Alias for memory add')
+  .requiredOption('--title <text>', 'memory title')
+  .requiredOption('--body <text>', 'memory body text')
+  .option('--tags <csv>', 'comma-separated memory tags', '')
+  .action(async (opts) => {
     try {
-      const { session } = await requireConfig();
-      await promoteConversationDraft(session.teamId, draftId, {
-        target: opts.to,
-        titleOverride: opts.title || null,
-      }, session.seatName);
-      console.log(chalk.green(`✓ Draft ${draftId} approved into ${opts.to}`));
-      console.log(chalk.cyan('  Run `gsync sync` to refresh the compiled context with the latest approved memory.'));
+      await addMemoryEntry(opts);
     } catch (err) {
-      console.error(chalk.red(`Memory approval failed: ${friendlyError(err)}`));
+      console.error(chalk.red(`Memory push failed: ${friendlyError(err)}`));
       if (program.opts().verbose) console.error(err);
       process.exit(1);
     }
