@@ -17,7 +17,7 @@ export default function ClosingSection({ sectionRef }) {
         </p>
         <div className="landing-close__actions">
           <Link className="landing-button landing-button--primary" to="/login">
-            Log in with a seat key
+            Log in or join a team
           </Link>
           <a
             className="landing-button landing-button--ghost"

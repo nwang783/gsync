@@ -6,9 +6,10 @@ import TeamColumns from '../components/TeamColumns.jsx';
 import UpdateFeed from '../components/UpdateFeed.jsx';
 import PlanDetail from '../components/PlanDetail.jsx';
 import MemoryPanel from '../components/MemoryPanel.jsx';
+import JoinCodePanel from '../components/JoinCodePanel.jsx';
 
 export default function Dashboard() {
-  const { teamId, role, seatName, logout, loading } = useAuth();
+  const { user, teamId, role, seatName, logout, loading } = useAuth();
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [activePage, setActivePage] = useState('overview');
 
@@ -33,6 +34,7 @@ export default function Dashboard() {
         {activePage === 'overview' && (
           <>
             <GoalBar teamId={teamId} onSelectPlan={setSelectedPlanId} />
+            <JoinCodePanel teamId={teamId} role={role} user={user} seatName={seatName} />
             <MemoryPanel teamId={teamId} />
             <UpdateFeed teamId={teamId} />
             <section className="overview-history-section">
