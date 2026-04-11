@@ -32,7 +32,7 @@ export default function TeamColumns({ teamId, onSelectPlan }) {
   useEffect(() => {
     const q = query(
       collection(db, 'teams', teamId, 'plans'),
-      where('status', 'in', ['draft', 'in-progress', 'review']),
+      where('status', 'in', ['proposed', 'draft', 'in-progress', 'review']),
     );
     const unsub = onSnapshot(q, (snap) => {
       const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
