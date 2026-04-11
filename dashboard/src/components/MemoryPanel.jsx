@@ -201,8 +201,6 @@ function MemoryTimelineItem({ entry }) {
   const [showModal, setShowModal] = useState(false);
   const timestamp = toDate(memoryTimestamp(entry));
   const timeLabel = relativeTime(timestamp) || 'unknown';
-  const rawPreview = String(entry.content || '').replace(/\s+/g, ' ').trim();
-  const preview = rawPreview.length > 180 ? `${rawPreview.slice(0, 180).trimEnd()}…` : rawPreview;
 
   return (
     <>
@@ -214,7 +212,6 @@ function MemoryTimelineItem({ entry }) {
             <span className="feed-action">added</span>{' '}
             <span className="feed-slug">{entry.title || 'Untitled'}</span>
           </span>
-          {preview && <span className="feed-note"> -- {preview}</span>}
           {entry.tags.length > 0 && (
             <span className="memory-tag-row" aria-label="memory tags">
               {entry.tags.map((tag) => (

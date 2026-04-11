@@ -17,6 +17,16 @@ function getUpdatedAtMs(plan) {
   return 0;
 }
 
+function getCreatedAtMs(plan) {
+  const createdAt = plan?.createdAt;
+  if (!createdAt) return 0;
+  if (createdAt instanceof Date) return createdAt.getTime();
+  if (typeof createdAt.toDate === 'function') return createdAt.toDate().getTime();
+  if (typeof createdAt.seconds === 'number') return createdAt.seconds * 1000;
+  if (typeof createdAt === 'number') return createdAt;
+  return 0;
+}
+
 export function getPlanGoalTags(plan) {
   const alignment = normalizeText(plan?.alignment);
   const summary = normalizeText(plan?.summary);
@@ -70,6 +80,8 @@ export function findGoalLinkedPlan(plans, goalType, goalContent) {
 
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
+    const createdDelta = getCreatedAtMs(b.plan) - getCreatedAtMs(a.plan);
+    if (createdDelta !== 0) return createdDelta;
     return getUpdatedAtMs(b.plan) - getUpdatedAtMs(a.plan);
   });
 

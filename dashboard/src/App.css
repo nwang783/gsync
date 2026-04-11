@@ -327,6 +327,10 @@ body::before {
   font-weight: 600;
   color: var(--text);
   line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .goal-card .goal-meta {
@@ -979,9 +983,119 @@ button.feed-item {
   color: var(--text-muted);
 }
 
-.feed-item .feed-note {
+.activity-stats {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.stat-chip {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+
+.stat-chip strong {
   color: var(--text);
-  margin-left: 4px;
+  font-weight: 600;
+}
+
+.insight-card {
+  border: 1px solid var(--border-light);
+  background: linear-gradient(180deg, rgba(250, 247, 240, 0.96) 0%, rgba(246, 241, 228, 0.92) 100%);
+  border-radius: var(--radius);
+  padding: 18px 18px 16px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.insight-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.insight-card__header h3 {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.insight-card__status {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid rgba(232, 93, 38, 0.22);
+  background: rgba(232, 93, 38, 0.08);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.insight-card__headline {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.insight-card__list {
+  padding-left: 18px;
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.insight-card__list--compact {
+  margin-bottom: 0;
+}
+
+.insight-card__split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.insight-card__group {
+  min-width: 0;
+}
+
+.insight-card__group-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.insight-card__meta {
+  margin-top: 12px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.2px;
+}
+
+.insight-card__loading,
+.insight-card__empty,
+.insight-card__error {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.insight-card__error {
+  color: #a33a2c;
 }
 
 .feed-load-more {

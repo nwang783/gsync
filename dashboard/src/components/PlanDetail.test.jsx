@@ -57,4 +57,74 @@ describe('PlanDetail', () => {
     expect(screen.getByText('Body copy.')).toBeInTheDocument();
     expect(getDocMock).toHaveBeenCalledTimes(1);
   });
+
+  it('does not keep showing the previous plan while switching to a new plan', async () => {
+    getDocMock.mockImplementation((ref) => {
+      if (ref.path.includes('/plan-1/content/current')) {
+        return Promise.resolve({
+          exists: () => true,
+          data: () => ({ markdown: '# Plan One\n\nOld body.', revision: 1 }),
+        });
+      }
+
+      if (ref.path.includes('/plan-2/content/current')) {
+        return Promise.resolve({
+          exists: () => true,
+          data: () => ({ markdown: '# Plan Two\n\nFresh body.', revision: 1 }),
+        });
+      }
+
+      return Promise.resolve({
+        exists: () => false,
+        data: () => ({}),
+      });
+    });
+
+    const { rerender } = render(<PlanDetail planId="plan-1" teamId="team1" onClose={() => {}} />);
+
+    snapshotCallbacks[0]({
+      exists: () => true,
+      id: 'plan-1',
+      data: () => ({
+        author: 'Nathan',
+        status: 'in-progress',
+        summary: 'Plan one summary',
+        alignment: 'Ship sync',
+        outOfScope: 'History',
+        touches: ['src/cli.js'],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        updates: [],
+      }),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Plan One' })).toBeInTheDocument();
+    });
+
+    rerender(<PlanDetail planId="plan-2" teamId="team1" onClose={() => {}} />);
+
+    expect(screen.getByText('Loading plan...')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Plan One' })).not.toBeInTheDocument();
+
+    snapshotCallbacks[1]({
+      exists: () => true,
+      id: 'plan-2',
+      data: () => ({
+        author: 'Nathan',
+        status: 'in-progress',
+        summary: 'Plan two summary',
+        alignment: 'Ship sync',
+        outOfScope: 'History',
+        touches: ['src/firestore.js'],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        updates: [],
+      }),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Plan Two' })).toBeInTheDocument();
+    });
+  });
 });
