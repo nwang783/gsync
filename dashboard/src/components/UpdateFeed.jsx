@@ -3,7 +3,7 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { relativeTime, toDate } from '../utils.js';
 
-export default function UpdateFeed({ teamId }) {
+export default function UpdateFeed({ teamId, onSelectPlan = null }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,6 +39,7 @@ export default function UpdateFeed({ teamId }) {
         time: toDate(plan.createdAt),
         author: plan.author,
         slug: plan.slug || plan.id,
+        planId: plan.id,
         action: 'created',
         note: plan.summary || '',
       });
@@ -50,6 +51,7 @@ export default function UpdateFeed({ teamId }) {
           time: toDate(u.timestamp),
           author: u.author || plan.author,
           slug: plan.slug || plan.id,
+          planId: plan.id,
           action: 'updated',
           note: u.note || '',
         });
@@ -98,7 +100,7 @@ export default function UpdateFeed({ teamId }) {
       <h2>## activity</h2>
       <div className="feed-list">
         {display.map((ev, i) => (
-          <div key={i} className="feed-item">
+          <button key={i} type="button" className="feed-item" onClick={() => onSelectPlan && onSelectPlan(ev.planId)}>
             <span className="feed-time">{relativeTime(ev.time)}</span>
             <span>
               <span className="feed-author">{ev.author}</span>{' '}
@@ -106,7 +108,7 @@ export default function UpdateFeed({ teamId }) {
               <span className="feed-slug">{ev.slug}</span>
               {ev.note && <span className="feed-note"> -- {ev.note}</span>}
             </span>
-          </div>
+          </button>
         ))}
       </div>
       {hasMore && (

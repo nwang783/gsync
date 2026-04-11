@@ -41,7 +41,7 @@ export default function Dashboard() {
           <>
             <GoalBar teamId={teamId} onSelectPlan={setSelectedPlanId} />
             <div className="overview-section">
-              <UpdateFeed teamId={teamId} />
+              <UpdateFeed teamId={teamId} onSelectPlan={setSelectedPlanId} />
             </div>
             <div className="overview-section">
               <h2>## individual histories</h2>
@@ -69,7 +69,7 @@ export default function Dashboard() {
         )}
 
         {activePage === 'activity' && (
-          <UpdateFeed teamId={teamId} />
+          <UpdateFeed teamId={teamId} onSelectPlan={setSelectedPlanId} />
         )}
 
         {selectedPlanId && (

@@ -11,15 +11,15 @@ test('buildCompiledContextPack produces fresh pack from approved memory', () => 
     recentPlans: [],
     memory: {
       revision: 3,
-      companyBrief: { content: 'We sell confidence for small teams.' },
-      projectBrief: { content: 'This quarter focuses on onboarding and reliability.' },
+      companyBriefs: [{ title: 'Company North Star', content: 'We sell confidence for small teams.' }],
+      projectBriefs: [{ title: 'Project Lighthouse', content: 'This quarter focuses on onboarding and reliability.' }],
       decisionLog: { entries: [{ decidedAt: '2026-04-10', summary: 'Keep approval-gated memory' }] },
     },
     now: new Date('2026-04-10T00:00:00.000Z'),
   });
 
   assert.equal(pack.state, 'fresh');
-  assert.match(pack.markdown, /Approved Company Brief/);
+  assert.match(pack.markdown, /Approved Company Briefs/);
   assert.match(pack.markdown, /Keep approval-gated memory/);
   assert.equal(pack.memoryRevision, 3);
 });
@@ -32,15 +32,15 @@ test('buildSyncContextContent includes approved memory in the normal sync artifa
     recentPlans: [],
     memory: {
       revision: 3,
-      companyBrief: { content: 'We sell confidence for small teams.' },
-      projectBrief: { content: 'This quarter focuses on onboarding and reliability.' },
+      companyBriefs: [{ title: 'Company North Star', content: 'We sell confidence for small teams.' }],
+      projectBriefs: [{ title: 'Project Lighthouse', content: 'This quarter focuses on onboarding and reliability.' }],
       decisionLog: { entries: [] },
     },
     now: new Date('2026-04-10T00:00:00.000Z'),
   });
 
   assert.equal(result.compiledPack.state, 'fresh');
-  assert.match(result.contextContent, /Approved Company Brief/);
+  assert.match(result.contextContent, /Approved Company Briefs/);
   assert.match(result.contextContent, /We sell confidence for small teams\./);
 });
 
@@ -52,8 +52,8 @@ test('buildCompiledContextPack marks missing when approved memory is incomplete'
     recentPlans: [],
     memory: {
       revision: 1,
-      companyBrief: { content: 'Only company brief exists.' },
-      projectBrief: null,
+      companyBriefs: [{ title: 'Company North Star', content: 'Only company brief exists.' }],
+      projectBriefs: [],
       decisionLog: { entries: [] },
     },
     now: new Date('2026-04-10T00:00:00.000Z'),

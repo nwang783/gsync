@@ -108,14 +108,24 @@ export function buildCompiledContextPack({ twoWeek, threeDay, activePlans, recen
     `Compiled at: ${compiledAt}`,
     `Memory revision: ${memoryRevision}`,
     '',
-    '## Approved Company Brief',
-    memory.companyBrief.content,
-    '',
-    '## Approved Project Brief',
-    memory.projectBrief.content,
-    '',
-    '## Approved Decision Log',
+    '## Approved Company Briefs',
   ];
+
+  for (const [index, entry] of (memory.companyBriefs || []).entries()) {
+    lines.push(`### Company Brief ${index + 1}: ${entry.title || 'Untitled'}`);
+    lines.push(entry.content);
+    lines.push('');
+  }
+
+  lines.push('## Approved Project Briefs');
+
+  for (const [index, entry] of (memory.projectBriefs || []).entries()) {
+    lines.push(`### Project Brief ${index + 1}: ${entry.title || 'Untitled'}`);
+    lines.push(entry.content);
+    lines.push('');
+  }
+
+  lines.push('## Approved Decision Log');
 
   const decisions = Array.isArray(memory.decisionLog?.entries) ? memory.decisionLog.entries : [];
   if (decisions.length === 0) {
@@ -173,8 +183,8 @@ export function assertReviewerContextReady(compiledPack, memoryState) {
 }
 
 function getMemoryCompleteness(memory) {
-  if (!memory?.companyBrief?.content) return 'missing';
-  if (!memory?.projectBrief?.content) return 'missing';
+  if (!Array.isArray(memory?.companyBriefs) || memory.companyBriefs.length === 0) return 'missing';
+  if (!Array.isArray(memory?.projectBriefs) || memory.projectBriefs.length === 0) return 'missing';
   return 'ready';
 }
 

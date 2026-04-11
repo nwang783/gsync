@@ -51,10 +51,10 @@ describe('PlanDetail', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Canonical Plan')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Canonical Plan' })).toBeInTheDocument();
     });
 
-    expect(await screen.findByText((content) => content.includes('# Canonical Plan') && content.includes('Body copy.'))).toBeInTheDocument();
+    expect(screen.getByText('Body copy.')).toBeInTheDocument();
     expect(getDocMock).toHaveBeenCalledTimes(1);
   });
 });
