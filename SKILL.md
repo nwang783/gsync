@@ -159,6 +159,19 @@ Use this to:
 - Check if any active plan already touches the files you're about to edit — if so, coordinate before starting
 - Avoid duplicating work that's already in progress or just merged
 
+If gsync itself feels broken, confusing, or unintuitive while you are using it, file feedback right away:
+
+```bash
+gsync report bug --title "<short title>" --body "<what broke, why it was confusing, and what should have happened>"
+gsync report feature --title "<short title>" --body "<what you wanted to do, what was missing, and why it matters>"
+```
+
+Guidance for agents:
+- Be honest. If something feels rough, say so plainly.
+- Be lenient in tone. The goal is useful product feedback, not venting.
+- Report product issues in gsync itself, not bugs in the user's application or repo.
+- Prefer specific reproduction details over vague complaints.
+
 Important: `gsync sync` no longer mirrors every full plan file locally. It gives you a summary index first. Pull full markdown plans only when they are relevant.
 
 Important: approved company memory is now compiled separately from the summary context. `gsync memory reviewer-context` prints the approval-gated company brief, project brief, decision log, and plan context bundle that reviewer agents should use. If approved memory changed after your last sync, this command fails closed and tells you to rerun `gsync sync` first.
@@ -227,6 +240,9 @@ Now take the output of your gstack plan and register it with gsync so your teamm
 
 ```bash
 gsync plan push my-plan.md
+# or, to also set this plan as the 3-day target or 2-week goal:
+gsync plan push my-plan.md --goal 3day
+gsync plan push my-plan.md --goal 2week
 ```
 
 Recommended `my-plan.md` shape:
@@ -348,21 +364,17 @@ Do this before starting the next task. Stale "review" plans pollute the team's C
 
 ## Goal Management
 
-Goals should be updated when the team explicitly decides to change direction — not unilaterally by one agent or engineer. When you do update them, use specific, measurable language:
+Goals are set by pushing a plan with `--goal 3day` or `--goal 2week`. Goals should be updated when the team explicitly decides to change direction — not unilaterally by one agent or engineer. When you do update them, use specific, measurable language in the plan summary:
 
 ```bash
-# Too vague — bad
-gsync goals set-2week --goal "improve the product"
+# Push a plan and set it as the 3-day target
+gsync plan push my-plan.md --goal 3day
 
-# Concrete and measurable — good
-gsync goals set-2week --goal "Ship multiplayer beta to 50 invite-only users with real-time presence, cursor tracking, and conflict-free editing by April 18"
-
-# Too vague — bad
-gsync goals set-3day --goal "work on the backend"
-
-# Specific enough to coordinate around — good
-gsync goals set-3day --goal "Merge WebSocket presence layer into staging and get sign-off from design on the cursor UI by Wednesday EOD"
+# Push a plan and set it as the 2-week goal
+gsync plan push my-plan.md --goal 2week
 ```
+
+The plan summary becomes the goal text visible to teammates and in CONTEXT.md. The full plan body is available via `gsync plan pull <id>`.
 
 ---
 
@@ -381,14 +393,17 @@ gsync plan pull <id>          # fetch full markdown plan into ~/.gsync/plans/
 gsync plan pull <id> --metadata-only  # print summary metadata only
 gsync plan pull <id> --stdout # print summary metadata + canonical markdown body
 gsync plan push my-plan.md    # create/update canonical markdown plan from file
+gsync plan push my-plan.md --goal 3day   # push plan and set as 3-day target
+gsync plan push my-plan.md --goal 2week  # push plan and set as 2-week goal
 gsync plan update <id> ...    # add a progress note (see Step 3)
 gsync plan review <id> --pr <url>  # link plan to PR, move to review status
 gsync plan merged <id>        # close a plan after PR merges
-gsync goals set-2week --goal "..."  # update 2-week goal
-gsync goals set-3day  --goal "..."  # update 3-day target
 gsync memory draft --title "..." --body "..."  # create a planning conversation draft
 gsync memory approve <draft-id> --to companyBrief|projectBrief|decisionLog  # promote approved memory
 gsync memory reviewer-context  # print the compiled, fail-closed approved-memory bundle
+gsync report bug --title "..." --body "..." --severity medium  # report a gsync bug
+gsync report feature --title "..." --body "..."  # report a gsync feature request
+gsync report list  # inspect recent gsync product feedback
 ```
 
 ---

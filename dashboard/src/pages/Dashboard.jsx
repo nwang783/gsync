@@ -6,10 +6,12 @@ import TeamColumns from '../components/TeamColumns.jsx';
 import UpdateFeed from '../components/UpdateFeed.jsx';
 import PlanDetail from '../components/PlanDetail.jsx';
 import CompanyPage from './CompanyPage.jsx';
+import ReportsPage from './ReportsPage.jsx';
 
 const PAGE_TITLES = {
   overview: '# overview',
   company: '# company',
+  reports: '# reports',
   me: '# me',
   activity: '# activity',
 };
@@ -35,6 +37,7 @@ export default function Dashboard() {
       <main className="app-main">
         <div className="app-header">
           <h1>{PAGE_TITLES[activePage] ?? '# overview'}</h1>
+          <span className="team-id">{teamId}</span>
         </div>
 
         {activePage === 'overview' && (
@@ -52,6 +55,10 @@ export default function Dashboard() {
 
         {activePage === 'company' && (
           <CompanyPage teamId={teamId} role={role} user={user} seatName={seatName} />
+        )}
+
+        {activePage === 'reports' && (
+          <ReportsPage teamId={teamId} />
         )}
 
         {activePage === 'me' && (

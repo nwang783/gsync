@@ -3,6 +3,7 @@ import { useState } from 'react';
 const NAV_ITEMS = [
   { id: 'overview', label: 'overview', icon: '~' },
   { id: 'company', label: 'company', icon: '◈' },
+  { id: 'reports', label: 'reports', icon: '!' },
   { id: 'me', label: 'me', icon: '>' },
 ];
 
