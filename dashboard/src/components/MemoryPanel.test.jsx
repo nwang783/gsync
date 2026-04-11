@@ -45,10 +45,13 @@ describe('MemoryPanel', () => {
       }),
     });
 
-    await waitFor(() => expect(screen.getByText(/approved strategy/i)).toBeInTheDocument());
-    expect(screen.getByText(/planning evidence/i)).toBeInTheDocument();
-    expect(screen.getByText(/Pricing options/)).toBeInTheDocument();
-    expect(screen.getByText(/state: fresh/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: /company brief/i })).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /project brief/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^decisions$/i })).toBeInTheDocument();
+    expect(screen.getByText(/open drafts/i)).toBeInTheDocument();
+    expect(screen.getByText(/project lighthouse/i)).toBeInTheDocument();
+    expect(screen.getByText(/^1$/)).toBeInTheDocument();
+    expect(screen.getByText(/fresh/i)).toBeInTheDocument();
   });
 
   it('marks the compiled context pack as needing sync after memory changes', async () => {
@@ -72,8 +75,8 @@ describe('MemoryPanel', () => {
       }),
     });
 
-    await waitFor(() => expect(screen.getByText(/state: sync required/i)).toBeInTheDocument());
-    expect(screen.getByText(/^sync required$/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/sync required/i)).toBeInTheDocument());
+    expect(screen.getByText(/last updated/i)).toBeInTheDocument();
   });
 
   it('shows empty state when memory summary is missing', async () => {
@@ -81,7 +84,7 @@ describe('MemoryPanel', () => {
     snapshotHandlers[0]({ exists: () => false });
 
     await waitFor(() => {
-      expect(screen.getByText(/No memory summary yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/No memory yet/i)).toBeInTheDocument();
     });
   });
 });

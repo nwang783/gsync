@@ -270,7 +270,7 @@ body::before {
 .goal-bar {
   display: flex;
   gap: 20px;
-  margin-bottom: 36px;
+  margin-bottom: 48px;
 }
 
 .goal-card {
@@ -618,6 +618,167 @@ body::before {
   letter-spacing: 0.3px;
 }
 
+/* ── MemoryPanel ── */
+.memory-panel {
+  margin-top: 0;
+  margin-bottom: 40px;
+}
+
+.memory-panel h2 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.memory-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: 0;
+}
+
+.memory-tab {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 6px 12px 8px;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.memory-tab:hover {
+  color: var(--text);
+}
+
+.memory-tab--active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.memory-tab-content {
+  min-height: 60px;
+}
+
+.memory-tab-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 12px 0;
+  font-style: italic;
+}
+
+/* Overview tab */
+.memory-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.memory-stat-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(192, 180, 158, 0.3);
+  font-size: 13px;
+}
+
+.memory-stat-row:last-child {
+  border-bottom: none;
+}
+
+.memory-stat-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  min-width: 110px;
+  flex-shrink: 0;
+}
+
+.memory-stat-value {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.memory-stat-value--empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Document tabs (company brief, project brief) */
+.memory-document {
+  padding: 4px 0;
+}
+
+.memory-document-title {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.memory-document-content {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text);
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.memory-document-meta {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 12px;
+  letter-spacing: 0.3px;
+}
+
+/* Decisions tab */
+.memory-decisions {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.memory-decision-entry {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(192, 180, 158, 0.3);
+}
+
+.memory-decision-entry:last-child {
+  border-bottom: none;
+}
+
+.memory-decision-summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.memory-decision-detail {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
+
 /* ── UpdateFeed ── */
 .update-feed {
   margin-top: 4px;
@@ -795,8 +956,24 @@ body::before {
   color: var(--text-muted);
 }
 
+.overview-section {
+  margin-top: 40px;
+}
+
+.overview-section h2 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  margin-bottom: 20px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+/* legacy alias */
 .overview-history-section {
-  margin-top: 44px;
+  margin-top: 40px;
 }
 
 .overview-history-section h2 {
