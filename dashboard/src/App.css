@@ -3371,3 +3371,362 @@ button.feed-item {
     transform: translateY(-2px);
   }
 }
+
+/* ── PM Agent Card ── */
+.pm-agent-card {
+  border: 1px solid var(--border-light);
+  background: linear-gradient(160deg, rgba(250, 247, 240, 0.98) 0%, rgba(240, 234, 214, 0.88) 100%);
+  border-radius: var(--radius);
+  padding: 14px 16px 14px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.pm-agent-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-warm) 55%, transparent 100%);
+  opacity: 0.55;
+}
+
+.pm-agent-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pm-agent-card__title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.pm-agent-card__header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pm-agent-card__body {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+
+.pm-agent-card__mascot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding-top: 2px;
+}
+
+.pm-mascot {
+  width: 68px;
+  height: auto;
+}
+
+.pm-mascot--idle {
+  opacity: 0.8;
+}
+
+.pm-agent-card__mood-label {
+  font-family: var(--font-display);
+  font-size: 8.5px;
+  color: var(--text-muted);
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.pm-agent-card__headline {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.pm-agent-card__bullets {
+  padding-left: 16px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.pm-agent-card__risks {
+  margin-top: 8px;
+}
+
+.pm-agent-card__section-label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.pm-agent-card__bullets--compact {
+  font-size: 12px;
+}
+
+.pm-agent-card__main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pm-agent-card__status-report {
+  min-width: 0;
+}
+
+.pm-agent-card__recs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--border-light);
+  padding-top: 10px;
+}
+
+.pm-agent-card__rec-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pm-agent-card__rec-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.pm-agent-card__rec-label {
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+
+.pm-agent-card__rec-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(59, 47, 30, 0.03);
+  border: 1px solid var(--border-light);
+  min-width: 0;
+  max-width: 200px;
+}
+
+.pm-agent-card__rec-chip--close {
+  border-left: 2px solid rgba(232, 93, 38, 0.35);
+}
+
+.pm-agent-card__rec-chip--next {
+  border-left: 2px solid rgba(58, 171, 92, 0.35);
+}
+
+.pm-agent-card__rec-slug {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: 0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.pm-agent-card__rec-action {
+  font-family: var(--font-display);
+  font-size: 8.5px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.pm-agent-card__rec-action--merged {
+  background: rgba(58, 171, 92, 0.1);
+  color: #2a8a4a;
+  border: 1px solid rgba(58, 171, 92, 0.22);
+}
+
+.pm-agent-card__rec-action--abandoned {
+  background: rgba(232, 93, 38, 0.08);
+  color: var(--accent);
+  border: 1px solid rgba(232, 93, 38, 0.18);
+}
+
+.pm-agent-card__rec-action-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pm-agent-card__rec-mark-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+
+.pm-agent-card__rec-mark-btn--merged {
+  color: #2a8a4a;
+  border-color: rgba(58, 171, 92, 0.45);
+}
+
+.pm-agent-card__rec-mark-btn--merged:hover {
+  background: rgba(58, 171, 92, 0.15);
+}
+
+.pm-agent-card__rec-mark-btn--abandoned {
+  color: var(--accent);
+  border-color: rgba(232, 93, 38, 0.4);
+}
+
+.pm-agent-card__rec-mark-btn--abandoned:hover {
+  background: rgba(232, 93, 38, 0.1);
+}
+
+/* Confirmation dialog */
+.pm-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 22, 12, 0.35);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.pm-confirm-dialog {
+  background: var(--card-bg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 20px 22px 16px;
+  max-width: 300px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(30, 22, 12, 0.18);
+}
+
+.pm-confirm-dialog__msg {
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  color: var(--text);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.pm-confirm-dialog__msg strong {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.pm-confirm-dialog__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.pm-confirm-dialog__btn {
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.pm-confirm-dialog__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pm-confirm-dialog__btn--cancel {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.pm-confirm-dialog__btn--cancel:hover:not(:disabled) {
+  background: rgba(59, 47, 30, 0.05);
+}
+
+.pm-confirm-dialog__btn--confirm.pm-confirm-dialog__btn--merged {
+  background: rgba(58, 171, 92, 0.1);
+  color: #2a8a4a;
+  border-color: rgba(58, 171, 92, 0.3);
+}
+
+.pm-confirm-dialog__btn--confirm.pm-confirm-dialog__btn--merged:hover:not(:disabled) {
+  background: rgba(58, 171, 92, 0.2);
+}
+
+.pm-confirm-dialog__btn--confirm.pm-confirm-dialog__btn--abandoned {
+  background: rgba(232, 93, 38, 0.08);
+  color: var(--accent);
+  border-color: rgba(232, 93, 38, 0.25);
+}
+
+.pm-confirm-dialog__btn--confirm.pm-confirm-dialog__btn--abandoned:hover:not(:disabled) {
+  background: rgba(232, 93, 38, 0.15);
+}
+
+.pm-agent-card__rec-evidence {
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  color: var(--text-muted);
+  letter-spacing: 0.1px;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+
+.pm-agent-card__rec-evidence--link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  overflow-wrap: break-word;
+}
+
+@media (max-width: 700px) {
+  .pm-agent-card__body {
+    grid-template-columns: 60px 1fr;
+  }
+}

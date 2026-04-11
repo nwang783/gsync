@@ -1,6 +1,10 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { vi, describe, it, beforeEach, expect } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { vi, describe, it, afterEach, beforeEach, expect } from 'vitest';
+
+vi.mock('./PMAgentCompanion.jsx', () => ({
+  default: ({ mood }) => <div data-testid="pm-mascot" data-mood={mood} />,
+}));
 
 const snapshotCallbacks = new Map();
 
@@ -32,6 +36,11 @@ function makePlan(id, minuteOffset) {
 }
 
 describe('UpdateFeed', () => {
+  afterEach(() => {
+    cleanup();
+    snapshotCallbacks.clear();
+  });
+
   beforeEach(() => {
     snapshotCallbacks.clear();
   });
@@ -91,5 +100,120 @@ describe('UpdateFeed', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /load 10 more/i }));
     expect(await screen.findByText('plan-11')).toBeInTheDocument();
+  });
+
+  it('renders PM agent panel when agent mood is present in the insight document', async () => {
+    render(<UpdateFeed teamId="team-pm" />);
+
+    await waitFor(() => expect(snapshotCallbacks.has('teams/team-pm/plans')).toBe(true));
+    snapshotCallbacks.get('teams/team-pm/plans')({ docs: [makePlan('1', 5)] });
+
+    await waitFor(() => expect(snapshotCallbacks.has('teams/team-pm/insights/activity-summary')).toBe(true));
+    snapshotCallbacks.get('teams/team-pm/insights/activity-summary')({
+      exists: () => true,
+      data: () => ({
+        status: 'ready',
+        model: 'google/gemini-3.1-flash-lite-preview',
+        generatedAt: new Date(),
+        confidence: 0.91,
+        headline: 'Team is on track with one merge landed.',
+        summaryBullets: ['One plan merged today.', 'Two plans still active.'],
+        riskFlags: [],
+        nextActions: [],
+        sourceWindow: { recentActivityCount: 3 },
+        agent: { mood: 'celebrating' },
+        recommendations: {
+          closeCandidates: [],
+          nextCandidates: [
+            {
+              planId: 'pn1',
+              slug: 'auth-flow',
+              title: 'Auth flow implementation',
+              reason: 'Advances 3-day target',
+              confidence: 0.8,
+              evidence: ['supports 3-day target', 'active in last 24h'],
+            },
+          ],
+        },
+      }),
+    });
+
+    await waitFor(() => expect(screen.getByText('## pm agent')).toBeInTheDocument());
+    expect(screen.getByText('Team is on track with one merge landed.')).toBeInTheDocument();
+    expect(screen.getByText('auth-flow')).toBeInTheDocument();
+    expect(screen.getByText('likely next')).toBeInTheDocument();
+    expect(screen.getByText('supports 3-day target')).toBeInTheDocument();
+
+    const mascot = screen.getByTestId('pm-mascot');
+    expect(mascot).toHaveAttribute('data-mood', 'celebrating');
+  });
+
+  it('falls back to ## ai summary card when agent mood is absent', async () => {
+    render(<UpdateFeed teamId="team-legacy" />);
+
+    await waitFor(() => expect(snapshotCallbacks.has('teams/team-legacy/plans')).toBe(true));
+    // provide one plan so UpdateFeed renders ActivitySummary (avoids the empty-state early return)
+    snapshotCallbacks.get('teams/team-legacy/plans')({ docs: [makePlan('1', 5)] });
+
+    await waitFor(() => expect(snapshotCallbacks.has('teams/team-legacy/insights/activity-summary')).toBe(true));
+    snapshotCallbacks.get('teams/team-legacy/insights/activity-summary')({
+      exists: () => true,
+      data: () => ({
+        status: 'ready',
+        headline: 'No activity this week.',
+        summaryBullets: ['No plans active.'],
+        riskFlags: [],
+        nextActions: [],
+        confidence: 0.5,
+        sourceWindow: { recentActivityCount: 0 },
+        // no `agent` field — legacy document shape
+      }),
+    });
+
+    await waitFor(() => expect(screen.getByText('## ai summary')).toBeInTheDocument());
+    expect(screen.getByText('No activity this week.')).toBeInTheDocument();
+    expect(screen.queryByText('## pm agent')).not.toBeInTheDocument();
+  });
+
+  it('renders PM agent panel with close recommendations', async () => {
+    render(<UpdateFeed teamId="team-close" />);
+
+    await waitFor(() => expect(snapshotCallbacks.has('teams/team-close/plans')).toBe(true));
+    snapshotCallbacks.get('teams/team-close/plans')({ docs: [makePlan('1', 60)] });
+
+    await waitFor(() => expect(snapshotCallbacks.has('teams/team-close/insights/activity-summary')).toBe(true));
+    snapshotCallbacks.get('teams/team-close/insights/activity-summary')({
+      exists: () => true,
+      data: () => ({
+        status: 'ready',
+        headline: 'One stale plan should be addressed.',
+        summaryBullets: ['One plan is stale.'],
+        riskFlags: [],
+        nextActions: [],
+        confidence: 0.7,
+        sourceWindow: { recentActivityCount: 1 },
+        agent: { mood: 'nudging' },
+        recommendations: {
+          closeCandidates: [
+            {
+              planId: 'pc1',
+              slug: 'old-feature',
+              title: 'Old feature work',
+              reason: 'No updates in 4+ days',
+              confidence: 0.72,
+              action: 'abandoned',
+              evidence: ['stale 4.2d', 'no goal alignment'],
+            },
+          ],
+          nextCandidates: [],
+        },
+      }),
+    });
+
+    await waitFor(() => expect(screen.getByText('## pm agent')).toBeInTheDocument());
+    expect(screen.getByText('consider closing')).toBeInTheDocument();
+    expect(screen.getByText('old-feature')).toBeInTheDocument();
+    expect(screen.getByText('mark abandoned')).toBeInTheDocument();
+    expect(screen.getByText('stale 4.2d')).toBeInTheDocument();
   });
 });
