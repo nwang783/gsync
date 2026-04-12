@@ -117,19 +117,44 @@ async function requireScopedTeamAdmin(req, requestedTeamId, deps = {}) {
 
 function createJoinCodeDoc(dbClient, batch, teamId, { seatId, seatName }) {
   const joinCode = generateJoinCode();
+  const codeHash = sha256(joinCode);
   const joinCodeRef = dbClient.doc(`teams/${teamId}/joinCodes/${uuidv4()}`);
-  batch.set(joinCodeRef, {
-    codeHash: sha256(joinCode),
+  const joinCodeDoc = {
+    codeHash,
     role: "member",
     uses: 0,
     createdAt: FieldValue.serverTimestamp(),
     createdBySeatId: seatId,
     createdBySeatName: seatName,
-  });
+  };
+
+  batch.set(joinCodeRef, joinCodeDoc);
+  batch.set(joinCodeLookupRef(dbClient, codeHash), buildJoinCodeLookupDoc({
+    teamId,
+    joinCodeRef,
+    role: joinCodeDoc.role,
+    createdBySeatId: seatId,
+    createdBySeatName: seatName,
+  }));
 
   return {
     joinCode,
     joinCodeRef,
+  };
+}
+
+function joinCodeLookupRef(dbClient, codeHash) {
+  return dbClient.doc(`joinCodeLookups/${codeHash}`);
+}
+
+function buildJoinCodeLookupDoc({ teamId, joinCodeRef, role, createdBySeatId, createdBySeatName }) {
+  return {
+    teamId,
+    joinCodePath: joinCodeRef.path,
+    role,
+    createdAt: FieldValue.serverTimestamp(),
+    createdBySeatId,
+    createdBySeatName,
   };
 }
 
@@ -244,14 +269,21 @@ async function createTeamReport({
 
 async function joinTeamWithCode({ dbClient = db, adminClient = admin, joinCode, seatName }) {
   const codeHash = sha256(joinCode);
+  const lookupRef = joinCodeLookupRef(dbClient, codeHash);
+  const lookupSnap = await lookupRef.get();
+  const lookup = lookupSnap.exists ? lookupSnap.data() : null;
 
-  const codesSnap = await dbClient
-    .collectionGroup("joinCodes")
-    .where("codeHash", "==", codeHash)
-    .limit(1)
-    .get();
+  let joinCodeRef = lookup?.joinCodePath ? dbClient.doc(lookup.joinCodePath) : null;
 
-  const joinCodeRef = codesSnap.empty ? null : codesSnap.docs[0].ref;
+  if (!joinCodeRef) {
+    const codesSnap = await dbClient
+      .collectionGroup("joinCodes")
+      .where("codeHash", "==", codeHash)
+      .limit(1)
+      .get();
+    joinCodeRef = codesSnap.empty ? null : codesSnap.docs[0].ref;
+  }
+
   const teamId = joinCodeRef ? joinCodeRef.parent.parent.id : null;
 
   if (!joinCodeRef) {
@@ -262,6 +294,12 @@ async function joinTeamWithCode({ dbClient = db, adminClient = admin, joinCode, 
 
   const result = await dbClient.runTransaction(async (tx) => {
     const freshSnap = await tx.get(joinCodeRef);
+    if (!freshSnap.exists) {
+      const err = new Error("Invalid join code");
+      err.status = 404;
+      throw err;
+    }
+
     const data = freshSnap.data();
 
     if (data.expiresAt && data.expiresAt.toDate() < new Date()) {
@@ -281,6 +319,13 @@ async function joinTeamWithCode({ dbClient = db, adminClient = admin, joinCode, 
     const now = FieldValue.serverTimestamp();
 
     tx.update(joinCodeRef, { uses: (data.uses || 0) + 1 });
+    tx.set(lookupRef, buildJoinCodeLookupDoc({
+      teamId,
+      joinCodeRef,
+      role: data.role || "member",
+      createdBySeatId: data.createdBySeatId || null,
+      createdBySeatName: data.createdBySeatName || null,
+    }), { merge: true });
 
     tx.set(dbClient.doc(`teams/${teamId}/memberships/${seatId}`), {
       role: data.role || "member",
