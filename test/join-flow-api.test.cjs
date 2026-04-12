@@ -199,9 +199,13 @@ test('issueJoinCodeForTeam always stores member invites', async () => {
   const stored = db._store.get(`teams/team-1/joinCodes/${result.joinCodeId}`);
   assert.equal(stored.role, 'member');
   assert.equal(stored.createdBySeatName, 'Admin Seat');
+
+  const lookup = db._store.get(`joinCodeLookups/${stored.codeHash}`);
+  assert.equal(lookup.teamId, 'team-1');
+  assert.equal(lookup.joinCodePath, `teams/team-1/joinCodes/${result.joinCodeId}`);
 });
 
-test('joinTeamWithCode lands the new seat on the same team', async () => {
+test('joinTeamWithCode lands the new seat on the same team and backfills lookup docs for legacy codes', async () => {
   const db = createMemoryDb({
     'teams/team-1/joinCodes/code-1': {
       codeHash: sha256('SP7E-YKDH-LPC3'),
@@ -229,6 +233,48 @@ test('joinTeamWithCode lands the new seat on the same team', async () => {
   const seatEntries = [...db._store.entries()].filter(([path]) => path.startsWith('seats/'));
   assert.equal(seatEntries.length, 1);
   assert.equal(seatEntries[0][1].homeTeamId, 'team-1');
+
+  const lookup = db._store.get(`joinCodeLookups/${sha256('SP7E-YKDH-LPC3')}`);
+  assert.equal(lookup.teamId, 'team-1');
+  assert.equal(lookup.joinCodePath, 'teams/team-1/joinCodes/code-1');
+});
+
+test('joinTeamWithCode prefers the top-level lookup over collection-group search', async () => {
+  const joinCode = 'SP7E-YKDH-LPC3';
+  const codeHash = sha256(joinCode);
+  const db = createMemoryDb({
+    'joinCodeLookups/55a0a645-should-not-be-used': {
+      teamId: 'team-other',
+      joinCodePath: 'teams/team-other/joinCodes/code-other',
+    },
+    [`joinCodeLookups/${codeHash}`]: {
+      teamId: 'team-1',
+      joinCodePath: 'teams/team-1/joinCodes/code-1',
+      role: 'member',
+    },
+    'teams/team-1/joinCodes/code-1': {
+      codeHash,
+      role: 'member',
+      uses: 0,
+      createdBySeatId: 'seat-admin',
+      createdBySeatName: 'Admin Seat',
+    },
+  });
+
+  db.collectionGroup = () => ({
+    where() {
+      throw new Error('collectionGroup lookup should not run when a lookup doc exists');
+    },
+  });
+
+  const result = await joinTeamWithCode({
+    dbClient: db,
+    adminClient: createAdminClient({ customTokenPrefix: 'joined' }),
+    joinCode,
+    seatName: 'Lookup Path Seat',
+  });
+
+  assert.equal(result.teamId, 'team-1');
 });
 
 test('createTeamReport stores bug reports with seat metadata', async () => {
