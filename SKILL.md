@@ -396,6 +396,7 @@ gsync plan push my-plan.md    # create/update canonical markdown plan from file
 gsync plan push my-plan.md --goal 3day   # push plan and set as 3-day target
 gsync plan push my-plan.md --goal 2week  # push plan and set as 2-week goal
 gsync plan update <id> ...    # add a progress note (see Step 3)
+gsync plan status <id> <status>  # set any non-empty status label
 gsync plan review <id> --pr <url>  # link plan to PR, move to review status
 gsync plan merged <id>        # close a plan after PR merges
 gsync memory draft --title "..." --body "..."  # create a planning conversation draft

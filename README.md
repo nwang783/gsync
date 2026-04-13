@@ -135,6 +135,7 @@ gsync plan push my-plan.md        # create or update canonical plan
 gsync plan push my-plan.md --goal 3day   # push plan and set as 3-day target
 gsync plan push my-plan.md --goal 2week  # push plan and set as 2-week goal
 gsync plan update <id> --note "milestone or blocker"
+gsync plan status <id> <status>  # set any non-empty status label
 gsync plan review <id> --pr https://github.com/org/repo/pull/123
 gsync plan merged <id>
 ```

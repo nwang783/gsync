@@ -99,6 +99,12 @@ function sanitizeFilename(str) {
   return str.replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'plan';
 }
 
+function validateHttpUrl(value, label) {
+  if (value && !/^https?:\/\//i.test(value)) {
+    throw new Error(`${label} must start with http:// or https://`);
+  }
+}
+
 function writeLocalPlanFile(summary, content) {
   ensureDirs();
   const filename = `${sanitizeFilename(summary.slug || 'plan')}--${summary.id}.md`;
@@ -373,15 +379,34 @@ planCmd
   });
 
 planCmd
+  .command('status <id> <status>')
+  .description('Set a plan status to any non-empty value')
+  .option('--pr <url>', 'pull request URL')
+  .action(async (id, status, opts) => {
+    try {
+      validateHttpUrl(opts.pr, 'PR URL');
+      const { session } = await requireConfig();
+      verbose('Setting plan status:', id, status);
+      const extra = opts.pr ? { prUrl: opts.pr } : {};
+      await updatePlanStatus(session.teamId, id, status, extra);
+      console.log(chalk.green(`✓ Plan ${id} status set to ${status}`));
+      if (opts.pr) {
+        console.log(chalk.cyan(`  PR: ${opts.pr}`));
+      }
+    } catch (err) {
+      console.error(chalk.red(`Plan status failed: ${friendlyError(err)}`));
+      if (program.opts().verbose) console.error(err);
+      process.exit(1);
+    }
+  });
+
+planCmd
   .command('review <id>')
   .description('Move plan to review status')
   .option('--pr <url>', 'pull request URL')
   .action(async (id, opts) => {
     try {
-      if (opts.pr && !/^https?:\/\//i.test(opts.pr)) {
-        console.error(chalk.red('PR URL must start with http:// or https://'));
-        process.exit(1);
-      }
+      validateHttpUrl(opts.pr, 'PR URL');
       const { session } = await requireConfig();
       verbose('Setting plan to review:', id);
       const extra = opts.pr ? { prUrl: opts.pr } : {};

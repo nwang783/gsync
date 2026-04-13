@@ -216,4 +216,33 @@ describe('UpdateFeed', () => {
     expect(screen.getByText('mark abandoned')).toBeInTheDocument();
     expect(screen.getByText('stale 4.2d')).toBeInTheDocument();
   });
+
+  it('counts arbitrary non-terminal statuses as active', async () => {
+    render(<UpdateFeed teamId="team-active" />);
+
+    await waitFor(() => expect(snapshotCallbacks.has('teams/team-active/plans')).toBe(true));
+    snapshotCallbacks.get('teams/team-active/plans')({
+      docs: [
+        { ...makePlan('1', 1), data: () => ({ ...makePlan('1', 1).data(), status: 'blocked-on-design' }) },
+        { ...makePlan('2', 2), data: () => ({ ...makePlan('2', 2).data(), status: 'qa-ready' }) },
+        { ...makePlan('3', 3), data: () => ({ ...makePlan('3', 3).data(), status: 'merged' }) },
+      ],
+    });
+
+    await waitFor(() => expect(snapshotCallbacks.has('teams/team-active/insights/activity-summary')).toBe(true));
+    snapshotCallbacks.get('teams/team-active/insights/activity-summary')({
+      exists: () => true,
+      data: () => ({
+        status: 'ready',
+        headline: 'Custom statuses remain visible.',
+        summaryBullets: [],
+        riskFlags: [],
+        nextActions: [],
+        confidence: 0.5,
+        sourceWindow: { recentActivityCount: 0 },
+      }),
+    });
+
+    await waitFor(() => expect(document.querySelector('.activity-stats')?.textContent).toContain('2 active'));
+  });
 });

@@ -4,6 +4,10 @@ import { db } from '../firebase.js';
 import { relativeTime, toDate } from '../utils.js';
 import ActivitySummary from './ActivitySummary.jsx';
 
+function isActivePlanStatus(status) {
+  return status !== 'merged' && status !== 'abandoned';
+}
+
 export default function UpdateFeed({ teamId, onSelectPlan = null }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,7 +77,7 @@ export default function UpdateFeed({ teamId, onSelectPlan = null }) {
     const now = Date.now();
     const DAY = 86400000;
     const createdToday = plans.filter(p => toDate(p.createdAt) > now - DAY).length;
-    const active = plans.filter(p => ['proposed', 'draft', 'in-progress', 'review'].includes(p.status)).length;
+    const active = plans.filter(p => isActivePlanStatus(p.status)).length;
     const merged = plans.filter(p => p.status === 'merged').length;
     const contributors = new Set(plans.map(p => p.author).filter(Boolean)).size;
     return { createdToday, active, merged, contributors };

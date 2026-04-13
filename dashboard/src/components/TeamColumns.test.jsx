@@ -3,19 +3,9 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { vi, describe, it, beforeEach, expect } from 'vitest';
 
 const snapshotCallbacks = [];
-const queryCalls = [];
-const whereCalls = [];
 
 vi.mock('firebase/firestore', () => ({
   collection: (...parts) => ({ path: parts.join('/') }),
-  query: (...parts) => {
-    queryCalls.push(parts);
-    return { parts };
-  },
-  where: (...parts) => {
-    whereCalls.push(parts);
-    return { parts };
-  },
   onSnapshot: (_ref, onNext) => {
     snapshotCallbacks.push(onNext);
     return () => {};
@@ -32,8 +22,6 @@ describe('TeamColumns', () => {
   beforeEach(() => {
     cleanup();
     snapshotCallbacks.length = 0;
-    queryCalls.length = 0;
-    whereCalls.length = 0;
   });
 
   it('shows summary-focused cards with special goal tags', async () => {
@@ -165,11 +153,8 @@ describe('TeamColumns', () => {
     expect(screen.getByText('3-day target')).toBeInTheDocument();
   });
 
-  it('includes proposed plans in individual histories', async () => {
+  it('includes arbitrary non-terminal statuses in individual histories', async () => {
     render(<TeamColumns teamId="team1" onSelectPlan={() => {}} />);
-
-    expect(whereCalls).toContainEqual(['status', 'in', ['proposed', 'draft', 'in-progress', 'review']]);
-    expect(queryCalls).toHaveLength(1);
 
     snapshotCallbacks[0]({
       docs: [
@@ -179,7 +164,7 @@ describe('TeamColumns', () => {
             author: 'nathan-laptop',
             slug: 'cart-lazy-init',
             summary: 'Stop eager cart initialization on unrelated pages',
-            status: 'proposed',
+            status: 'blocked-on-design',
             updatedAt: new Date('2026-04-09T10:00:00Z'),
           }),
         },
