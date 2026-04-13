@@ -1,25 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isValidPlanStatusTransition, VALID_PLAN_STATUS_TRANSITIONS } from '../src/firestore.js';
+import { isValidPlanStatus } from '../src/firestore.js';
 
-test('proposed plans can move directly to review', () => {
-  assert.equal(isValidPlanStatusTransition('proposed', 'review'), true);
+test('accepts built-in statuses', () => {
+  assert.equal(isValidPlanStatus('proposed'), true);
+  assert.equal(isValidPlanStatus('review'), true);
+  assert.equal(isValidPlanStatus('merged'), true);
 });
 
-test('draft plans can still move through the existing flow', () => {
-  assert.equal(isValidPlanStatusTransition('draft', 'in-progress'), true);
-  assert.equal(isValidPlanStatusTransition('draft', 'review'), true);
+test('accepts arbitrary agent-defined statuses', () => {
+  assert.equal(isValidPlanStatus('blocked-on-design'), true);
+  assert.equal(isValidPlanStatus('qa-ready'), true);
+  assert.equal(isValidPlanStatus('waiting for human signoff'), true);
 });
 
-test('existing blocked transitions remain blocked', () => {
-  assert.equal(isValidPlanStatusTransition('review', 'in-progress'), false);
-  assert.equal(isValidPlanStatusTransition('merged', 'review'), false);
-});
-
-test('transition map keeps abandoned allowed from any current status', () => {
-  for (const status of Object.keys(VALID_PLAN_STATUS_TRANSITIONS)) {
-    assert.equal(isValidPlanStatusTransition(status, 'abandoned'), true);
-  }
-  assert.equal(isValidPlanStatusTransition('proposed', 'abandoned'), true);
+test('rejects empty or non-string statuses', () => {
+  assert.equal(isValidPlanStatus(''), false);
+  assert.equal(isValidPlanStatus('   '), false);
+  assert.equal(isValidPlanStatus(null), false);
+  assert.equal(isValidPlanStatus(undefined), false);
 });

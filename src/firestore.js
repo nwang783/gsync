@@ -10,7 +10,6 @@ import {
   setDoc,
   updateDoc,
   query,
-  where,
   orderBy,
   limit as limitDocs,
   getDocs,
@@ -473,18 +472,12 @@ export async function updatePlanNote(teamId, planId, note, userName) {
   });
 }
 
-export const VALID_PLAN_STATUS_TRANSITIONS = {
-  proposed: ['review', 'abandoned'],
-  draft: ['in-progress', 'review', 'abandoned'],
-  'in-progress': ['review', 'abandoned'],
-  review: ['merged', 'abandoned'],
-  merged: ['abandoned'],
-};
+export function isValidPlanStatus(nextStatus) {
+  return typeof nextStatus === 'string' && nextStatus.trim().length > 0;
+}
 
-export function isValidPlanStatusTransition(currentStatus, nextStatus) {
-  if (nextStatus === 'abandoned') return true;
-  const allowed = VALID_PLAN_STATUS_TRANSITIONS[currentStatus];
-  return Boolean(allowed && allowed.includes(nextStatus));
+export function isTerminalPlanStatus(status) {
+  return status === 'merged' || status === 'abandoned';
 }
 
 export async function updatePlanStatus(teamId, planId, status, extraFields = {}) {
@@ -492,12 +485,8 @@ export async function updatePlanStatus(teamId, planId, status, extraFields = {})
   await runTransaction(getDb(), async (transaction) => {
     const snap = await transaction.get(ref);
     if (!snap.exists()) throw new Error(`Plan ${planId} not found.`);
-    const currentStatus = snap.data().status;
-    if (!isValidPlanStatusTransition(currentStatus, status)) {
-      const allowed = VALID_PLAN_STATUS_TRANSITIONS[currentStatus];
-      throw new Error(
-        `Invalid status transition: ${currentStatus} → ${status}. Allowed: ${(allowed || []).join(', ') || 'none'}`
-      );
+    if (!isValidPlanStatus(status)) {
+      throw new Error('Plan status must be a non-empty string.');
     }
     transaction.update(ref, { status, updatedAt: serverTimestamp(), ...extraFields });
   });
@@ -505,10 +494,10 @@ export async function updatePlanStatus(teamId, planId, status, extraFields = {})
 
 export async function getActivePlans(teamId) {
   const col = collection(getDb(), 'teams', teamId, 'plans');
-  const q = query(col, where('status', 'in', ['in-progress', 'review']));
-  const snap = await getDocs(q);
+  const snap = await getDocs(col);
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((plan) => !isTerminalPlanStatus(plan.status))
     .sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
 }
 

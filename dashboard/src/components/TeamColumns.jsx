@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase.js';
 import { relativeTime } from '../utils.js';
 import { getPlanGoalTags } from '../lib/planTags.js';
+
+function isActivePlanStatus(status) {
+  return status !== 'merged' && status !== 'abandoned';
+}
 
 function getUpdatedAtMs(updatedAt) {
   if (!updatedAt) return 0;
@@ -30,12 +34,11 @@ export default function TeamColumns({ teamId, onSelectPlan }) {
   }, []);
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'teams', teamId, 'plans'),
-      where('status', 'in', ['proposed', 'draft', 'in-progress', 'review']),
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const plansRef = collection(db, 'teams', teamId, 'plans');
+    const unsub = onSnapshot(plansRef, (snap) => {
+      const docs = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((plan) => isActivePlanStatus(plan.status));
       setPlans(docs);
       setLoading(false);
     }, (err) => {
