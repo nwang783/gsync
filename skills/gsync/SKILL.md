@@ -38,6 +38,7 @@ The current project's gsync system is defined by:
 - `.gsync/config.json`
 - `.gsync/GSYNC.md`
 - each collection's configured doc file
+- optional files in `.gsync/agents/`
 
 Those files are the source of truth.
 
@@ -78,6 +79,139 @@ Each collection exists to group one kind of context and define how agents should
 - what to avoid doing there
 
 Do not assume two projects use the same collections the same way.
+
+## What `.gsync/agents/` Is For
+
+`.gsync/agents/` is the place for role-specific agent instructions.
+
+Use it when the current project wants named agents such as:
+
+- PM
+- code quality
+- cyber
+
+These files are not collections. Collections store context. `.gsync/agents/` stores role-specific operating instructions.
+
+If `.gsync/agents/` exists, read the relevant agent file for role-specific work after you read `.gsync/config.json` and `.gsync/GSYNC.md`.
+
+## What Agents Are
+
+In gsync, an agent file is a reusable instruction file for a named role.
+
+Use agent files when the current project wants stable role behavior such as:
+
+- PM
+- code quality
+- cyber
+
+An agent file should explain:
+
+- what the agent is for
+- when to use it
+- what it should read first
+- what it is allowed to write
+- what it should avoid
+
+## How To Build An Agent
+
+When the current project wants a new agent under `.gsync/agents/`, keep it small and role-specific.
+
+A good agent file usually has:
+
+- `Purpose`
+- `Use When`
+- `Reads`
+- `Writes`
+- `Avoid`
+
+Build agents around real recurring roles, not one-off tasks. If an instruction only matters once, put it in the relevant collection or project docs instead of creating a new agent.
+
+At minimum, an agent should also say:
+
+- what artifact types it writes
+- where it writes them
+
+## Bare-Minimum Examples
+
+These are bare-minimum examples. Real project implementations should usually be more detailed, more specific, and more grounded in the actual codebase and workflows.
+
+### Example Agent: `cyber`
+
+```md
+# cyber
+
+## Purpose
+
+Help with security review, risky-surface inspection, and threat-oriented checks.
+
+## Use When
+
+- reviewing auth, secrets, trust boundaries, or risky integrations
+- checking for obvious security regressions
+- inspecting code paths that accept untrusted input
+
+## Reads
+
+- `.gsync/config.json`
+- `.gsync/GSYNC.md`
+- relevant collection docs
+- security-sensitive code and configuration
+
+## Writes
+
+- security findings
+- risk notes
+- suggested mitigations
+
+## Artifact Types
+
+- markdown findings
+- risk review notes
+
+## Write Location
+
+- wherever the current project's docs say security findings belong
+- if no location is defined, ask before creating one
+
+## Avoid
+
+- do not claim formal security assurance from lightweight review alone
+- do not create speculative findings without pointing to concrete code or behavior
+```
+
+### Example Collection: `activity`
+
+```md
+# activity
+
+## Purpose
+
+Store developer coordination artifacts for current and upcoming work.
+
+## Canonical Artifacts
+
+- plan files
+
+## Read Before Writing
+
+- read existing plan files that look relevant to the task
+- avoid creating parallel plans for the same workstream
+
+## Write Conventions
+
+- use markdown files for plans
+- keep one plan per workstream
+- name files descriptively according to the current project's chosen convention
+
+## Scripts and Automation
+
+No collection-local scripts yet.
+
+## Avoid
+
+- do not introduce a universal summary format in V1
+- do not create extra coordination artifacts unless the project docs ask for them
+```
 
 ## Required Read Order
 
@@ -122,6 +256,15 @@ If the current project needs a new collection:
 - propose it to the user first
 - once approved, add it by updating `.gsync/config.json`, `.gsync/GSYNC.md`, and the new collection doc together
 - use `gsync-onboarding` if the change is effectively a setup or extension flow
+
+## Creating New Agent Files
+
+If the current project needs a new role-specific agent:
+
+- do not create it silently
+- propose it to the user first
+- once approved, add it under `.gsync/agents/`
+- update `.gsync/GSYNC.md` and `AGENTS.md` if the new agent changes how future agents should orient themselves
 
 ## How To Decide What Matters
 
