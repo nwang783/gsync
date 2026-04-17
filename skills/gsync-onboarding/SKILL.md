@@ -102,6 +102,14 @@ When initializing `.gsync/`, write:
 - each configured collection folder
 - each configured collection doc file
 
+Also update `AGENTS.md` with a short gsync section so future agents know:
+
+- this project uses gsync
+- `.gsync/config.json` declares collections
+- `.gsync/GSYNC.md` explains the high-level system
+- collection docs define local conventions
+- agents should read those files before writing gsync data
+
 Optionally write:
 
 - example files
@@ -172,6 +180,24 @@ This project uses `gsync` to keep agent-readable context in the working tree its
 - collection processors
 - dashboards
 - extra automation
+```
+
+### Starter `AGENTS.md` Addition
+
+Add a short section like this to the project's `AGENTS.md`:
+
+```md
+## gsync
+
+This project uses `gsync` for agent-readable context.
+
+Before reading or writing gsync data:
+
+1. Read `.gsync/config.json`
+2. Read `.gsync/GSYNC.md`
+3. Read the relevant collection doc file(s)
+
+Do not invent new collection structure silently. If a new collection or convention is needed, ask first.
 ```
 
 ### Starter Collection Doc Shape
