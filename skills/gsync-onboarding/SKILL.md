@@ -116,6 +116,26 @@ Optionally write:
 
 Do not keep adding structure once the smallest viable setup is in place.
 
+## `.gitattributes` For PR Noise
+
+If the project wants gsync data tracked in git but collapsed in GitHub PRs, update `.gitattributes`, not `.gitignore`.
+
+Use this default rule:
+
+```gitattributes
+.gsync/data/** linguist-generated=true
+```
+
+That keeps:
+
+- `.gsync/config.json` review-visible
+- `.gsync/GSYNC.md` review-visible
+- collection docs review-visible
+
+while collapsing the higher-churn data under `.gsync/data/**` in PRs.
+
+If `.gitattributes` does not exist, create it. If it already exists, append the gsync rule without removing existing entries.
+
 ## Starter Drafts
 
 Unless the user wants something materially different, start from these drafts and customize them for the current project.
@@ -198,6 +218,14 @@ Before reading or writing gsync data:
 3. Read the relevant collection doc file(s)
 
 Do not invent new collection structure silently. If a new collection or convention is needed, ask first.
+```
+
+### Starter `.gitattributes` Addition
+
+Add this line to `.gitattributes` if the project wants tracked gsync data to create less PR noise:
+
+```gitattributes
+.gsync/data/** linguist-generated=true
 ```
 
 ### Starter Collection Doc Shape
