@@ -332,3 +332,7 @@ At the end of onboarding:
 - otherwise provide the user with the steady-state `GSYNC` skill artifact they should install or load next
 
 After onboarding, future agents should use `GSYNC`, not `gsync-onboarding`.
+
+Canonical `GSYNC` skill source:
+
+- [GSYNC skill](https://github.com/nwang783/gsync/blob/main/skills/gsync/SKILL.md)
