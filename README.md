@@ -8,6 +8,7 @@ V1 is intentionally small:
 - a reusable `gsync-onboarding` skill
 - a minimal `.gsync/config.json` contract
 - project-local docs that tell agents how this repo uses `gsync`
+- plan lifecycle (active/closed with archive) and intents (lightweight pre-plan coordination signals)
 
 The old Firebase prototype is preserved in [legacy/firebase-prototype](/Users/nathanwang/Projects/nomergeconflicts/legacy/firebase-prototype).
 
