@@ -186,6 +186,9 @@ This project uses `gsync` to keep agent-readable context in the working tree its
 ## Collection Conventions
 
 - `activity` is for current work context and plan artifacts
+- `activity` plans use frontmatter with `status: active` or `status: closed`
+- `activity` intents live in the `intents/` subdirectory as lightweight pre-plan signals
+- closed plans are moved to the `archive/` subdirectory
 - `company` is for broader context that should inform planning and execution
 
 ## Guardrails
@@ -193,6 +196,8 @@ This project uses `gsync` to keep agent-readable context in the working tree its
 - do not invent new collection structure without updating docs
 - do not silently add collections
 - ask before changing core conventions
+- before creating a new plan, check `intents/` for overlapping intents
+- never delete plan or intent files; close and archive instead
 
 ## Not Yet Implemented
 
@@ -272,17 +277,35 @@ Store developer coordination artifacts for current and upcoming work.
 ## Canonical Artifacts
 
 - plan files
+- intent files
 
 ## Read Before Writing
 
 - read existing plan files that look relevant to the task
 - avoid duplicating parallel plans for the same work
+- check the `intents/` subdirectory for open intents before creating a new plan
 
 ## Write Conventions
 
 - use markdown files for plans
 - keep one plan per workstream
 - name files descriptively according to the project's chosen convention
+- store intents in the `intents/` subdirectory with `intent-<slug>.md` naming
+- archive closed plans to the `archive/` subdirectory
+- plans and intents use YAML frontmatter with at least `status`, `summary`, and `created`
+
+## Plan Lifecycle
+
+- plans start with `status: active` (or no status field, which implies active)
+- to close a plan, set `status: closed`, add `closed_date` and `closed_reason`, and move the file to `archive/`
+- never delete plan files
+
+## Intent Lifecycle
+
+- intents start with `status: open`
+- intents can be claimed (`status: claimed`) with a `claimed_by` and `claimed_note` (max 150 chars)
+- `claimed` means someone is actively working toward a plan — do not duplicate without coordinating
+- intents are closed in place (not moved to archive) with `status: closed`, `closed_date`, and `closed_reason`
 
 ## Scripts and Automation
 
@@ -292,6 +315,7 @@ No collection-local scripts yet.
 
 - do not introduce a global summary format in V1
 - do not create extra coordination artifacts unless the project docs ask for them
+- do not delete plan or intent files; close and archive instead
 ```
 
 ### Recommended `company.md` Draft

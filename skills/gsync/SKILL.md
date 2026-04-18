@@ -191,17 +191,21 @@ Store developer coordination artifacts for current and upcoming work.
 ## Canonical Artifacts
 
 - plan files
+- intent files
 
 ## Read Before Writing
 
 - read existing plan files that look relevant to the task
 - avoid creating parallel plans for the same workstream
+- check the `intents/` subdirectory for open intents before creating a new plan
 
 ## Write Conventions
 
 - use markdown files for plans
 - keep one plan per workstream
 - name files descriptively according to the current project's chosen convention
+- store intents in the `intents/` subdirectory with `intent-<slug>.md` naming
+- archive closed plans to the `archive/` subdirectory
 
 ## Scripts and Automation
 
@@ -211,6 +215,7 @@ No collection-local scripts yet.
 
 - do not introduce a universal summary format in V1
 - do not create extra coordination artifacts unless the project docs ask for them
+- do not delete plan or intent files; close and archive them instead
 ```
 
 ## Required Read Order
@@ -282,7 +287,8 @@ After reading config and docs:
 3. Find the collection or collections relevant to the task
 4. Read each relevant collection doc
 5. Inspect the existing canonical artifacts in those collections
-6. Make the minimum change that follows the documented conventions
+6. If creating a new plan, check intents for overlap first (see "Overlap Check Before Plan Creation")
+7. Make the minimum change that follows the documented conventions
 
 ## Behavior Inside Collections
 
@@ -293,6 +299,135 @@ When writing inside a collection:
 - keep collection-local logic local
 - reference collection-local scripts only if the collection doc tells you to use them
 - keep the write proportional to the task instead of redesigning the collection
+
+## Plan Lifecycle
+
+Plans use YAML frontmatter to track their lifecycle status.
+
+**Frontmatter fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `status` | no | `active` (default) or `closed`. Omitting `status` means active. |
+| `summary` | yes | One-line description of the plan. |
+| `touches` | no | List of file paths this plan affects. |
+| `created` | yes | Date the plan was created (YYYY-MM-DD). |
+| `closed_date` | when closing | Date the plan was closed. |
+| `closed_reason` | when closing | Why the plan was closed. |
+
+**Active plan example:**
+
+```yaml
+---
+status: active
+summary: Refactor auth module to use JWT
+touches: [src/auth/jwt.ts, src/middleware/auth.ts]
+created: 2026-04-08
+---
+```
+
+**Closed plan example:**
+
+```yaml
+---
+status: closed
+summary: Refactor auth module to use JWT
+touches: [src/auth/jwt.ts, src/middleware/auth.ts]
+created: 2026-04-08
+closed_date: 2026-04-10
+closed_reason: Completed and merged in PR #42
+---
+```
+
+**How to close a plan:**
+
+1. Set `status: closed` in the frontmatter
+2. Add `closed_date` and `closed_reason`
+3. Move the file to the `archive/` subdirectory of the activity collection
+4. Create `archive/` if it does not exist
+
+**Rules:**
+
+- Never delete plan files. Always close and archive them.
+- A plan without a `status` field is treated as active (backward compatible).
+- When listing active plans, read files from the activity collection root directory only. Do not scan `archive/`.
+- The frontmatter `status` field is the source of truth. A file with `status: closed` is closed regardless of where it is located.
+
+## Intents
+
+Intents are lightweight pre-plan signals. They express "I want to work on this" without committing to a full plan's scope, timeline, or alignment.
+
+Intents are stored in the `intents/` subdirectory of the activity collection as `intent-<slug>.md` files.
+
+**Intent frontmatter fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `status` | yes | `open`, `claimed`, or `closed`. |
+| `summary` | yes | Short description of the intended work. |
+| `touches` | no | List of file paths this intent would affect. |
+| `created` | yes | Date the intent was created (YYYY-MM-DD). |
+| `claimed_by` | when claiming | Name or identifier of who claimed it. |
+| `claimed_note` | when claiming | What the claimer plans to do (max 150 characters). |
+| `closed_date` | when closing | Date the intent was closed. |
+| `closed_reason` | when closing | Why it was closed (e.g., "Fulfilled by plan refactor-auth.md"). |
+
+**Intent lifecycle:**
+
+```
+open → claimed → closed
+  │                 ↑
+  └─────────────────┘  (can close directly without claiming)
+```
+
+**Open intent example:**
+
+```yaml
+---
+status: open
+summary: Speed up CI builds by parallelizing test suites
+touches: [.github/workflows/ci.yml, jest.config.ts]
+created: 2026-04-10
+claimed_by:
+claimed_note:
+---
+
+Optional longer description or context here.
+```
+
+**Claimed intent example:**
+
+```yaml
+---
+status: claimed
+summary: Speed up CI builds by parallelizing test suites
+touches: [.github/workflows/ci.yml, jest.config.ts]
+created: 2026-04-10
+claimed_by: nathan
+claimed_note: Starting with vitest parallel config first
+---
+```
+
+**Rules:**
+
+- Anyone can create an intent. Anyone can claim an open intent.
+- `claimed` means someone is actively working toward a plan for this. Do not open a duplicate intent or plan without coordinating first.
+- To close an intent, set `status: closed`, add `closed_date` and `closed_reason`. Leave the file in the `intents/` directory (do not move it to archive — intents are small enough that closed ones are not noisy).
+- When listing open intents, filter by `status: open` or `status: claimed`.
+- Keep `claimed_note` to 150 characters or fewer.
+
+## Overlap Check Before Plan Creation
+
+Before creating a new plan in the activity collection, check for overlapping intents:
+
+1. Read all `intent-*.md` files in the `intents/` subdirectory.
+2. For each intent with `status: open` or `status: claimed`, check whether your plan describes similar work:
+   - Look for shared key terms in the `summary` fields (shared nouns, shared domain concepts).
+   - Look for overlapping entries in the `touches` arrays (shared file paths or shared parent directories).
+3. If you find a likely overlap, tell the user which intent(s) may be related and ask whether the plan fulfills, extends, or is unrelated to each.
+4. If the plan fulfills an intent, close the intent: set `status: closed`, `closed_date` to today, and `closed_reason` to `Fulfilled by plan <plan-filename>.md`.
+
+This check is judgment-based, not algorithmic. Flag potential overlaps and let the user decide. False negatives are acceptable — this is a coordination signal, not a locking mechanism.
 
 ## What To Surface To The User
 
